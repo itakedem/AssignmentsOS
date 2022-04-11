@@ -435,12 +435,24 @@ wait(uint64 addr)
 //  - swtch to start running that process.
 //  - eventually that process transfers control
 //    via swtch back to the scheduler.
+int pause_state = 0;
+int pause_ticks = -1;
+
+int
+to_run_process(struct proc* p)
+{
+    if((p->pid == 1 || p->pid == 2) && p->state == RUNNABLE)
+        return 1;
+    if (p->state == RUNNABLE && pause_state == 0)
+        return 1;
+    return 0;
+}
+
 void
 scheduler(void)
 {
   struct proc *p;
   struct cpu *c = mycpu();
-  
   c->proc = 0;
   for(;;){
     // Avoid deadlock by ensuring that devices can interrupt.
@@ -448,7 +460,7 @@ scheduler(void)
 
     for(p = proc; p < &proc[NPROC]; p++) {
       acquire(&p->lock);
-      if(p->state == RUNNABLE) {
+      if(to_run_process(p)) {
         // Switch to chosen process.  It is the process's job
         // to release its lock and then reacquire it
         // before jumping back to us.
@@ -459,6 +471,10 @@ scheduler(void)
         // Process is done running for now.
         // It should have changed its p->state before coming back.
         c->proc = 0;
+      }
+      else if (pause_state == 1 && ticks >= pause_ticks) { //reached time to wait for pause_system call
+          pause_state = 0;
+          pause_ticks = -1;
       }
       release(&p->lock);
     }
@@ -659,21 +675,13 @@ procdump(void)
 int
 pause_system(int seconds)
 {
-//    struct proc *p;
-//    for(p = proc; p < &proc[NPROC]; p++) {
-//        acquire(&p->lock);
-//        if(p->state == RUNNING) {
-//            // Switch to chosen process.  It is the process's job
-//            p->state = RUNNABLE;
-//            }
-//        }
-//
-//    clock_t t = clock();
-//    while (((double)(clock() - t))/CLOCKS_PER_SEC < seconds)
-//
-//    for(p = proc; p < &proc[NPROC]; p++) {
-//        release(&p->lock);
-//    }
-//    sched();
+    pause_state = 1;
+    pause_ticks = seconds * 10 + ticks;
+    return 0;
+}
+
+int
+kill_system(void)
+{
     return 0;
 }
