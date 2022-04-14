@@ -130,6 +130,7 @@ found:
   p->mean_ticks = 0;
   p->last_cpu_ticks = 0;
   p->last_runnable_time = ticks;
+  p->start_session_ticks = ticks;
   p->runnable_time = 0;
   p->running_time = 0;
   p->sleeping_time = 0;
@@ -256,6 +257,7 @@ userinit(void)
   p->cwd = namei("/");
 
   p->state = RUNNABLE;
+  p->last_runnable_time = ticks;
 
   release(&p->lock);
 }
@@ -326,6 +328,7 @@ fork(void)
 
   acquire(&np->lock);
   np->state = RUNNABLE;
+  np->start_session_ticks = ticks;
   release(&np->lock);
 
   return pid;
@@ -715,6 +718,7 @@ wakeup(void *chan)
       acquire(&p->lock);
       if(p->state == SLEEPING && p->chan == chan) {
         p->state = RUNNABLE;
+        p->last_runnable_time = ticks; //for FCFS maintenance
         p->sleeping_time += (ticks - p->start_session_ticks);
         p->start_session_ticks = ticks;
       }
@@ -833,4 +837,12 @@ void update_cpu_ticks(struct proc *p) {
     p->last_cpu_ticks = ticks - p->start_session_ticks;
     p->mean_ticks = ((10 - rate) * p->mean_ticks + p->last_cpu_ticks * (rate)) / 10;
     p->start_session_ticks = ticks;
+}
+
+void print_stats(){
+    printf("the mean running time is %d\n", running_processes_mean);
+    printf("the mean runnable time is %d\n", runnable_processes_mean);
+    printf("the mean sleeping time is %d\n", sleeping_processes_mean);
+    printf("the CPU utilization  running time is %d\n", cpu_utilization);
+    printf("the Global running time is %d\n", program_time);
 }

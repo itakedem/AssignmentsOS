@@ -6,7 +6,6 @@
 #include "memlayout.h"
 #include "spinlock.h"
 #include "proc.h"
-#include "time.h"
 
 uint64
 sys_exit(void)
@@ -110,5 +109,12 @@ uint64
 sys_kill_system(void)
 {
     kill_system();
+    return 0;
+}
+
+uint64
+sys_print_stats(void)
+{
+    print_stats();
     return 0;
 }
