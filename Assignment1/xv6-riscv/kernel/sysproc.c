@@ -109,5 +109,6 @@ sys_pause_system(void)
 uint64
 sys_kill_system(void)
 {
-    return 0; //TODO
+    kill_system();
+    return 0;
 }

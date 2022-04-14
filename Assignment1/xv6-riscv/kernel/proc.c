@@ -120,6 +120,8 @@ allocproc(void)
 found:
   p->pid = allocpid();
   p->state = USED;
+  p->mean_ticks = 0;
+  p->last_ticks = 0;
 
   // Allocate a trapframe page.
   if((p->trapframe = (struct trapframe *)kalloc()) == 0){
@@ -451,34 +453,124 @@ to_run_process(struct proc* p)
 void
 scheduler(void)
 {
-  struct proc *p;
-  struct cpu *c = mycpu();
-  c->proc = 0;
-  for(;;){
-    // Avoid deadlock by ensuring that devices can interrupt.
-    intr_on();
+#ifdef DEFAULT
+    roundRobin();
+#elif SJF
+    roundRobin();//SJF();
+#endif
 
-    for(p = proc; p < &proc[NPROC]; p++) {
-      acquire(&p->lock);
-      if(to_run_process(p)) {
-        // Switch to chosen process.  It is the process's job
-        // to release its lock and then reacquire it
-        // before jumping back to us.
-        p->state = RUNNING;
-        c->proc = p;
-        swtch(&c->context, &p->context);
+}
 
-        // Process is done running for now.
-        // It should have changed its p->state before coming back.
-        c->proc = 0;
-      }
-      else if (pause_state == 1 && ticks >= pause_ticks) { //reached time to wait for pause_system call
-          pause_state = 0;
-          pause_ticks = -1;
-      }
-      release(&p->lock);
+//void
+//SJF(void) //TODO: how to stop clock interrupt
+//{
+//    struct proc *p;
+//    struct cpu *c = mycpu();
+//    c->proc = 0;
+//    for(;;){
+//        // Avoid deadlock by ensuring that devices can interrupt.
+//        intr_on();
+//        struct proc *minProc;
+//        int minMeanTicks = -1;
+//        for(p = proc; p < &proc[NPROC]; p++) {
+//            acquire(&p->lock);
+//            if(to_run_process(p)) {
+//                if (minMeanTicks == -1 || p->mean_ticks < minMeanTicks) {
+//                    minProc = p;
+//                    minMeanTicks = p->mean_ticks;
+//                }
+//            }
+//            else if (pause_state == 1 && ticks >= pause_ticks) { //reached time to wait for pause_system call
+//                pause_state = 0;
+//                pause_ticks = -1;
+//            }
+//            release(&p->lock);
+//        }
+//
+//        if (minMeanTicks == -1)
+//            continue;
+//
+//        /*runs the process with min mean ticks*/
+//        acquire(&minProc->lock);
+//        minProc->state = RUNNING;
+//        c->proc = minProc;
+//        minProc->start_ticks = ticks;
+//        swtch(&c->context, &minProc->context);
+//
+//        // Process is done running for now.
+//        // It should have changed its p->state before coming back.
+//        c->proc = 0;
+//        release(&minProc->lock);
+//    }
+//}
+
+
+void
+roundRobin(void)
+{
+
+    struct proc *p;
+    struct cpu *c = mycpu();
+    c->proc = 0;
+    for(;;){
+        // Avoid deadlock by ensuring that devices can interrupt.
+        intr_on();
+
+        for(p = proc; p < &proc[NPROC]; p++) {
+            acquire(&p->lock);
+            if(to_run_process(p)) {
+                // Switch to chosen process.  It is the process's job
+                // to release its lock and then reacquire it
+                // before jumping back to us.
+                p->state = RUNNING;
+                c->proc = p;
+                swtch(&c->context, &p->context);
+
+                // Process is done running for now.
+                // It should have changed its p->state before coming back.
+                c->proc = 0;
+            }
+            else if (pause_state == 1 && ticks >= pause_ticks) { //reached time to wait for pause_system call
+                pause_state = 0;
+                pause_ticks = -1;
+            }
+            release(&p->lock);
+        }
     }
-  }
+}
+
+void
+SJF(void)
+{
+
+    struct proc *p;
+    struct cpu *c = mycpu();
+    c->proc = 0;
+    for(;;){
+        // Avoid deadlock by ensuring that devices can interrupt.
+        intr_on();
+
+        for(p = proc; p < &proc[NPROC]; p++) {
+            acquire(&p->lock);
+            if(to_run_process(p)) {
+                // Switch to chosen process.  It is the process's job
+                // to release its lock and then reacquire it
+                // before jumping back to us.
+                p->state = RUNNING;
+                c->proc = p;
+                swtch(&c->context, &p->context);
+
+                // Process is done running for now.
+                // It should have changed its p->state before coming back.
+                c->proc = 0;
+            }
+            else if (pause_state == 1 && ticks >= pause_ticks) { //reached time to wait for pause_system call
+                pause_state = 0;
+                pause_ticks = -1;
+            }
+            release(&p->lock);
+        }
+    }
 }
 
 // Switch to scheduler.  Must hold only p->lock
@@ -513,8 +605,11 @@ void
 yield(void)
 {
   struct proc *p = myproc();
+  int rate = 5;
   acquire(&p->lock);
   p->state = RUNNABLE;
+  p->last_ticks = ticks - p->start_ticks;
+  p->mean_ticks = ((10 - rate) * p->mean_ticks + p->last_ticks * (rate)) / 10;
   sched();
   release(&p->lock);
 }
@@ -683,5 +778,13 @@ pause_system(int seconds)
 int
 kill_system(void)
 {
+    struct proc *p;
+    for(p = proc; p < &proc[NPROC]; p++){
+        if (p->pid == 1 || p->pid == 2)
+            continue;
+
+        if (kill(p->pid) == -1)
+            return -1;
+    }
     return 0;
 }
