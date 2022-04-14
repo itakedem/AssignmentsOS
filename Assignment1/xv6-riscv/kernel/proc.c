@@ -13,6 +13,12 @@ struct proc proc[NPROC];
 
 struct proc *initproc;
 
+int sleeping_processes_mean, running_processes_mean, runnable_processes_mean = 0;
+int number_process = 0;   // number of processes from starting time
+int program_time = 0;    // running time of all processes
+int start_time;
+int cpu_utilization = 0;
+
 int nextpid = 1;
 struct spinlock pid_lock;
 
@@ -55,6 +61,7 @@ procinit(void)
       initlock(&p->lock, "proc");
       p->kstack = KSTACK((int) (p - proc));
   }
+  start_time = ticks;   //start time initiate
 }
 
 // Must be called with interrupts disabled,
@@ -121,8 +128,11 @@ found:
   p->pid = allocpid();
   p->state = USED;
   p->mean_ticks = 0;
-  p->last_ticks = 0;
-
+  p->last_cpu_ticks = 0;
+  p->last_runnable_time = ticks;
+  p->runnable_time = 0;
+  p->running_time = 0;
+  p->sleeping_time = 0;
   // Allocate a trapframe page.
   if((p->trapframe = (struct trapframe *)kalloc()) == 0){
     freeproc(p);
@@ -376,6 +386,15 @@ exit(int status)
 
   release(&wait_lock);
 
+  sleeping_processes_mean = ((sleeping_processes_mean * number_process) + p->sleeping_time) / (number_process + 1);
+  running_processes_mean = ((running_processes_mean * number_process) + p->running_time) / (number_process + 1);
+  runnable_processes_mean = ((runnable_processes_mean * number_process) + p->runnable_time) / (number_process + 1);
+  number_process +=1;
+
+  program_time += p->running_time;
+
+  cpu_utilization = (program_time * 100) / (ticks - start_time);
+
   // Jump into the scheduler, never to return.
   sched();
   panic("zombie exit");
@@ -450,65 +469,117 @@ to_run_process(struct proc* p)
     return 0;
 }
 
+
+
 void
 scheduler(void)
 {
 #ifdef DEFAULT
     roundRobin();
 #elif SJF
-    roundRobin();//SJF();
+    sjf();
+#elif FCFS
+    fcfs();
 #endif
-
 }
 
-//void
-//SJF(void) //TODO: how to stop clock interrupt
-//{
-//    struct proc *p;
-//    struct cpu *c = mycpu();
-//    c->proc = 0;
-//    for(;;){
-//        // Avoid deadlock by ensuring that devices can interrupt.
-//        intr_on();
-//        struct proc *minProc;
-//        int minMeanTicks = -1;
-//        for(p = proc; p < &proc[NPROC]; p++) {
-//            acquire(&p->lock);
-//            if(to_run_process(p)) {
-//                if (minMeanTicks == -1 || p->mean_ticks < minMeanTicks) {
-//                    minProc = p;
-//                    minMeanTicks = p->mean_ticks;
-//                }
-//            }
-//            else if (pause_state == 1 && ticks >= pause_ticks) { //reached time to wait for pause_system call
-//                pause_state = 0;
-//                pause_ticks = -1;
-//            }
-//            release(&p->lock);
-//        }
-//
-//        if (minMeanTicks == -1)
-//            continue;
-//
-//        /*runs the process with min mean ticks*/
-//        acquire(&minProc->lock);
-//        minProc->state = RUNNING;
-//        c->proc = minProc;
-//        minProc->start_ticks = ticks;
-//        swtch(&c->context, &minProc->context);
-//
-//        // Process is done running for now.
-//        // It should have changed its p->state before coming back.
-//        c->proc = 0;
-//        release(&minProc->lock);
-//    }
-//}
 
+void start_running_process(struct proc *p, struct cpu *c) {
+    if(p->state != RUNNABLE)  // in SJF and FCFS the process can change state while we check which one is minimal
+        return;
+    p->state = RUNNING;
+    c->proc = p;
+    p->runnable_time += (ticks - p->start_session_ticks);
+    p->start_session_ticks = ticks;
+    swtch(&c->context, &p->context);
+}
+
+void
+sjf(void) //TODO: how to stop clock interrupt
+{
+    printf("SJF Policy \n");
+    struct proc *p;
+    struct cpu *c = mycpu();
+    c->proc = 0;
+    for(;;){
+        // Avoid deadlock by ensuring that devices can interrupt.
+        intr_on();
+        struct proc *minProc;
+        int minMeanTicks = -1;
+        for(p = proc; p < &proc[NPROC]; p++) {
+            acquire(&p->lock);
+            if(to_run_process(p)) {
+                if (minMeanTicks == -1 || p->mean_ticks < minMeanTicks) {
+                    minProc = p;
+                    minMeanTicks = p->mean_ticks;
+                }
+            }
+            else if (pause_state == 1 && ticks >= pause_ticks) { //reached time to wait for pause_system call
+                pause_state = 0;
+                pause_ticks = -1;
+            }
+            release(&p->lock);
+        }
+
+        if (minMeanTicks == -1)
+            continue;
+
+        /*runs the process with min mean ticks*/
+        acquire(&minProc->lock);
+        start_running_process(minProc, c);
+
+        // Process is done running for now.
+        // It should have changed its p->state before coming back.
+        c->proc = 0;
+        release(&minProc->lock);
+    }
+}
+
+void
+fcfs(void) //TODO: how to stop clock interrupt
+{
+    printf("FCFS Policy \n");
+    struct proc *p;
+    struct cpu *c = mycpu();
+    c->proc = 0;
+    for(;;){
+        // Avoid deadlock by ensuring that devices can interrupt.
+        intr_on();
+        struct proc *minProc;
+        int minRunnable = -1;
+        for(p = proc; p < &proc[NPROC]; p++) {
+            acquire(&p->lock);
+            if(to_run_process(p)) {
+                if (minRunnable == -1 || p->last_runnable_time < minRunnable) {
+                    minProc = p;
+                    minRunnable = p->last_runnable_time;
+                }
+            }
+            else if (pause_state == 1 && ticks >= pause_ticks) { //reached time to wait for pause_system call
+                pause_state = 0;
+                pause_ticks = -1;
+            }
+            release(&p->lock);
+        }
+
+        if (minRunnable == -1)
+            continue;
+
+        /*runs the process with min mean ticks*/
+        acquire(&minProc->lock);
+        start_running_process(minProc, c);
+
+        // Process is done running for now.
+        // It should have changed its p->state before coming back.
+        c->proc = 0;
+        release(&minProc->lock);
+    }
+}
 
 void
 roundRobin(void)
 {
-
+    printf("Round Robin Policy \n");
     struct proc *p;
     struct cpu *c = mycpu();
     c->proc = 0;
@@ -522,9 +593,7 @@ roundRobin(void)
                 // Switch to chosen process.  It is the process's job
                 // to release its lock and then reacquire it
                 // before jumping back to us.
-                p->state = RUNNING;
-                c->proc = p;
-                swtch(&c->context, &p->context);
+                start_running_process(p, c);
 
                 // Process is done running for now.
                 // It should have changed its p->state before coming back.
@@ -539,39 +608,6 @@ roundRobin(void)
     }
 }
 
-void
-SJF(void)
-{
-
-    struct proc *p;
-    struct cpu *c = mycpu();
-    c->proc = 0;
-    for(;;){
-        // Avoid deadlock by ensuring that devices can interrupt.
-        intr_on();
-
-        for(p = proc; p < &proc[NPROC]; p++) {
-            acquire(&p->lock);
-            if(to_run_process(p)) {
-                // Switch to chosen process.  It is the process's job
-                // to release its lock and then reacquire it
-                // before jumping back to us.
-                p->state = RUNNING;
-                c->proc = p;
-                swtch(&c->context, &p->context);
-
-                // Process is done running for now.
-                // It should have changed its p->state before coming back.
-                c->proc = 0;
-            }
-            else if (pause_state == 1 && ticks >= pause_ticks) { //reached time to wait for pause_system call
-                pause_state = 0;
-                pause_ticks = -1;
-            }
-            release(&p->lock);
-        }
-    }
-}
 
 // Switch to scheduler.  Must hold only p->lock
 // and have changed proc->state. Saves and restores
@@ -605,11 +641,11 @@ void
 yield(void)
 {
   struct proc *p = myproc();
-  int rate = 5;
   acquire(&p->lock);
   p->state = RUNNABLE;
-  p->last_ticks = ticks - p->start_ticks;
-  p->mean_ticks = ((10 - rate) * p->mean_ticks + p->last_ticks * (rate)) / 10;
+  p->last_runnable_time = ticks;     //for FCFS maintenance
+  p->running_time += (ticks - p->start_session_ticks);
+  update_cpu_ticks(p);
   sched();
   release(&p->lock);
 }
@@ -655,7 +691,8 @@ sleep(void *chan, struct spinlock *lk)
   // Go to sleep.
   p->chan = chan;
   p->state = SLEEPING;
-
+  p->running_time += (ticks - p->start_session_ticks);
+  update_cpu_ticks(p);
   sched();
 
   // Tidy up.
@@ -678,6 +715,8 @@ wakeup(void *chan)
       acquire(&p->lock);
       if(p->state == SLEEPING && p->chan == chan) {
         p->state = RUNNABLE;
+        p->sleeping_time += (ticks - p->start_session_ticks);
+        p->start_session_ticks = ticks;
       }
       release(&p->lock);
     }
@@ -787,4 +826,11 @@ kill_system(void)
             return -1;
     }
     return 0;
+}
+
+void update_cpu_ticks(struct proc *p) {
+    int rate = 5;
+    p->last_cpu_ticks = ticks - p->start_session_ticks;
+    p->mean_ticks = ((10 - rate) * p->mean_ticks + p->last_cpu_ticks * (rate)) / 10;
+    p->start_session_ticks = ticks;
 }

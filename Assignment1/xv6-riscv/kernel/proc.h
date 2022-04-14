@@ -107,7 +107,12 @@ struct proc {
   char name[16];               // Process name (debugging)
 
   uint64 mean_ticks;            // mean ticks that took the process
-  uint64 last_ticks;            // amount of ticks in last run
-  uint64 start_ticks;           // number of ticks when the process got cpu time
+  uint64 last_cpu_ticks;          // amount of ticks in last run
+  uint64 start_session_ticks;        // number of ticks when the process started current mode
+  uint64  last_runnable_time;   //the ticks when the process started to run the last time
+
+  uint64 sleeping_time;         //Total time spent in the SLEEPING state
+  uint64 runnable_time;         // Total time spent in the RUNNABLE state.
+  uint64 running_time;          // Total time spent in the RUNNING state.
 
 };
