@@ -815,6 +815,7 @@ pause_system(int seconds)
 {
     pause_state = 1;
     pause_ticks = seconds * 10 + ticks;
+    yield();
     return 0;
 }
 
