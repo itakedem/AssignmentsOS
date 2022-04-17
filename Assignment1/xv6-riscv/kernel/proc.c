@@ -129,8 +129,6 @@ found:
   p->state = USED;
   p->mean_ticks = 0;
   p->last_cpu_ticks = 0;
-  p->last_runnable_time = ticks;
-  p->start_session_ticks = ticks;
   p->runnable_time = 0;
   p->running_time = 0;
   p->sleeping_time = 0;
@@ -258,7 +256,7 @@ userinit(void)
 
   p->state = RUNNABLE;
   p->last_runnable_time = ticks;
-
+  p->start_session_ticks = ticks;
   release(&p->lock);
 }
 
@@ -328,6 +326,7 @@ fork(void)
 
   acquire(&np->lock);
   np->state = RUNNABLE;
+  p->last_runnable_time = ticks;
   np->start_session_ticks = ticks;
   release(&np->lock);
 
@@ -392,7 +391,7 @@ exit(int status)
   sleeping_processes_mean = ((sleeping_processes_mean * number_process) + p->sleeping_time) / (number_process + 1);
   running_processes_mean = (((running_processes_mean * number_process) + p->running_time) / (number_process + 1));
   runnable_processes_mean = ((runnable_processes_mean * number_process) + p->runnable_time) / (number_process + 1);
-  number_process +=1;
+  number_process += 1;
 
   program_time += p->running_time;
 
