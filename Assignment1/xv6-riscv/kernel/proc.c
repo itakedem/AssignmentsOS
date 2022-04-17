@@ -390,7 +390,7 @@ exit(int status)
   release(&wait_lock);
 
   sleeping_processes_mean = ((sleeping_processes_mean * number_process) + p->sleeping_time) / (number_process + 1);
-  running_processes_mean = ((running_processes_mean * number_process) + p->running_time) / (number_process + 1);
+  running_processes_mean = (((running_processes_mean * number_process) + p->running_time) / (number_process + 1));
   runnable_processes_mean = ((runnable_processes_mean * number_process) + p->runnable_time) / (number_process + 1);
   number_process +=1;
 
@@ -495,10 +495,11 @@ void start_running_process(struct proc *p, struct cpu *c) {
     p->runnable_time += (ticks - p->start_session_ticks);
     p->start_session_ticks = ticks;
     swtch(&c->context, &p->context);
+    //printf("%d\n",(p->state==RUNNABLE)); test that there are no interrupts
 }
 
 void
-sjf(void) //TODO: how to stop clock interrupt
+sjf(void)
 {
     printf("SJF Policy \n");
     struct proc *p;
@@ -531,15 +532,17 @@ sjf(void) //TODO: how to stop clock interrupt
         acquire(&minProc->lock);
         start_running_process(minProc, c);
 
+
         // Process is done running for now.
         // It should have changed its p->state before coming back.
         c->proc = 0;
         release(&minProc->lock);
+
     }
 }
 
 void
-fcfs(void) //TODO: how to stop clock interrupt
+fcfs(void)
 {
     printf("FCFS Policy \n");
     struct proc *p;
@@ -842,6 +845,7 @@ void update_cpu_ticks(struct proc *p) {
 
 void print_stats(){
     printf("the mean running time is %d\n", running_processes_mean);
+    printf("the number_process %d\n", number_process);
     printf("the mean runnable time is %d\n", runnable_processes_mean);
     printf("the mean sleeping time is %d\n", sleeping_processes_mean);
     printf("the CPU utilization  running time is %d\n", cpu_utilization);

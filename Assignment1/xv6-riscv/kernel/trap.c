@@ -6,6 +6,12 @@
 #include "proc.h"
 #include "defs.h"
 
+#ifdef DEFAULT
+int isRR = 1;
+#else
+int isRR = 0;
+#endif
+
 struct spinlock tickslock;
 uint ticks;
 
@@ -77,7 +83,7 @@ usertrap(void)
     exit(-1);
 
   // give up the CPU if this is a timer interrupt.
-  if(which_dev == 2)
+  if(which_dev == 2 && isRR)
     yield();
 
   usertrapret();
@@ -130,7 +136,10 @@ usertrapret(void)
 
 // interrupts and exceptions from kernel code go here via kernelvec,
 // on whatever the current kernel stack is.
-void 
+
+
+void
+
 kerneltrap()
 {
   int which_dev = 0;
@@ -150,7 +159,7 @@ kerneltrap()
   }
 
   // give up the CPU if this is a timer interrupt.
-  if(which_dev == 2 && myproc() != 0 && myproc()->state == RUNNING)
+  if(which_dev == 2 && myproc() != 0 && myproc()->state == RUNNING && isRR)
     yield();
 
   // the yield() may have caused some traps to occur,
