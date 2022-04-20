@@ -132,6 +132,7 @@ found:
   p->runnable_time = 0;
   p->running_time = 0;
   p->sleeping_time = 0;
+  number_process += 1;
   // Allocate a trapframe page.
   if((p->trapframe = (struct trapframe *)kalloc()) == 0){
     freeproc(p);
@@ -391,7 +392,7 @@ exit(int status)
   sleeping_processes_mean = ((sleeping_processes_mean * number_process) + p->sleeping_time) / (number_process + 1);
   running_processes_mean = (((running_processes_mean * number_process) + p->running_time) / (number_process + 1));
   runnable_processes_mean = ((runnable_processes_mean * number_process) + p->runnable_time) / (number_process + 1);
-  number_process += 1;
+
 
   program_time += p->running_time;
 
