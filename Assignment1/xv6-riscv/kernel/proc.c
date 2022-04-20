@@ -5,7 +5,6 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "defs.h"
-#include "time.h"
 
 struct cpu cpus[NCPU];
 
@@ -13,11 +12,12 @@ struct proc proc[NPROC];
 
 struct proc *initproc;
 
-int sleeping_processes_mean, running_processes_mean, runnable_processes_mean = 0;
-int number_process = 0;   // number of processes from starting time
-int program_time = 0;    // running time of all processes
-int start_time;
-int cpu_utilization = 0;
+uint sleeping_processes_mean, running_processes_mean, runnable_processes_mean = 0;
+uint number_process = 0;   // number of processes from starting time
+uint program_time = 0;    // running time of all processes
+uint start_time;
+uint cpu_utilization = 0;
+uint rate = 5;
 
 int nextpid = 1;
 struct spinlock pid_lock;
@@ -387,7 +387,7 @@ exit(int status)
   p->state = ZOMBIE;
 
   release(&wait_lock);
-
+  p->running_time += (ticks - p->start_session_ticks);
   sleeping_processes_mean = ((sleeping_processes_mean * number_process) + p->sleeping_time) / (number_process + 1);
   running_processes_mean = (((running_processes_mean * number_process) + p->running_time) / (number_process + 1));
   runnable_processes_mean = ((runnable_processes_mean * number_process) + p->runnable_time) / (number_process + 1);
@@ -744,6 +744,9 @@ kill(int pid)
       if(p->state == SLEEPING){
         // Wake process from sleep().
         p->state = RUNNABLE;
+        p->last_runnable_time = ticks;
+        p->sleeping_time += (ticks - p->start_session_ticks);
+        p->start_session_ticks = ticks;
       }
       release(&p->lock);
       return 0;
@@ -836,7 +839,6 @@ kill_system(void)
 }
 
 void update_cpu_ticks(struct proc *p) {
-    int rate = 5;
     p->last_cpu_ticks = ticks - p->start_session_ticks;
     p->mean_ticks = ((10 - rate) * p->mean_ticks + p->last_cpu_ticks * (rate)) / 10;
     p->start_session_ticks = ticks;
