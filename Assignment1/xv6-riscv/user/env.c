@@ -29,6 +29,10 @@ void env(int size, int interval, char* env_name) {
             result = result * size;
         }
     }
+    if(pid !=0){
+        wait(&pid);
+    }
+
     printf("\n");
 }
 
@@ -47,28 +51,25 @@ void env_freq() {
 int
 main(int argc, char *argv[])
 {
-    int n_forks = 2;
-    int pid = getpid();
-    for (int i = 0; i < n_forks; i++) {
-        fork();
-    }
-    int larges = 0;
-    int freqs = 0;
     int n_experiments = 10;
     for (int i = 0; i < n_experiments; i++) {
         env_large();
-        if (pid == getpid()) {
-            printf("experiment %d/%d\n", i + 1, n_experiments);
-            larges = (larges * i + 3) / (i + 1);
-        }
+
+
+        printf("--------------------------------------------\n");
+        printf("experiment %d large env", i+1);
+        printf("--------------------------------------------\n");
+        print_stats();
+
+        printf("experiment %d/%d\n", i + 1, n_experiments);
+
         sleep(10);
         env_freq();
-        if (pid == getpid()) {
-            freqs = (freqs * i + 3) / (i + 1);
-        }
-    }
-    if (pid == getpid()) {
-        printf("larges = %d\nfreqs = %d\n", larges, freqs);
+        printf("--------------------------------------------\n");
+        printf("experiment %d small env", i+1);
+        printf("--------------------------------------------\n");
+        print_stats();
+
     }
     exit(0);
 }
