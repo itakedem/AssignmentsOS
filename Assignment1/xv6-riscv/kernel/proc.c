@@ -132,7 +132,6 @@ found:
   p->runnable_time = 0;
   p->running_time = 0;
   p->sleeping_time = 0;
-  number_process += 1;
   // Allocate a trapframe page.
   if((p->trapframe = (struct trapframe *)kalloc()) == 0){
     freeproc(p);
@@ -389,11 +388,12 @@ exit(int status)
 
   release(&wait_lock);
   p->running_time += (ticks - p->start_session_ticks);
-  //number of processes includes the current exiting process
-  sleeping_processes_mean = ((sleeping_processes_mean * (number_process - 1)) + p->sleeping_time) / number_process;
-  running_processes_mean = ((running_processes_mean * (number_process - 1)) + p->running_time) / number_process ;
-  runnable_processes_mean = ((runnable_processes_mean * (number_process - 1)) + p->runnable_time) / number_process ;
 
+  sleeping_processes_mean = ((sleeping_processes_mean * number_process) + p->sleeping_time) / (number_process + 1);
+  running_processes_mean = ((running_processes_mean * number_process) + p->running_time) / (number_process + 1) ;
+  runnable_processes_mean = ((runnable_processes_mean * number_process) + p->runnable_time) / (number_process + 1) ;
+
+  number_process += 1;
 
   program_time += p->running_time;
 
@@ -851,6 +851,6 @@ void print_stats(){
     printf("the number_process %d\n", number_process);
     printf("the mean runnable time is %d\n", runnable_processes_mean);
     printf("the mean sleeping time is %d\n", sleeping_processes_mean);
-    printf("the CPU utilization  running time is %d\n", cpu_utilization);
+    printf("the CPU utilization running time is %d\n", cpu_utilization);
     printf("the Global running time is %d\n", program_time);
 }
