@@ -389,9 +389,10 @@ exit(int status)
 
   release(&wait_lock);
   p->running_time += (ticks - p->start_session_ticks);
-  sleeping_processes_mean = ((sleeping_processes_mean * number_process) + p->sleeping_time) / (number_process + 1);
-  running_processes_mean = (((running_processes_mean * number_process) + p->running_time) / (number_process + 1));
-  runnable_processes_mean = ((runnable_processes_mean * number_process) + p->runnable_time) / (number_process + 1);
+  //number of processes includes the current exiting process
+  sleeping_processes_mean = ((sleeping_processes_mean * (number_process - 1)) + p->sleeping_time) / number_process;
+  running_processes_mean = ((running_processes_mean * (number_process - 1)) + p->running_time) / number_process ;
+  runnable_processes_mean = ((runnable_processes_mean * (number_process - 1)) + p->runnable_time) / number_process ;
 
 
   program_time += p->running_time;
@@ -841,7 +842,7 @@ kill_system(void)
 
 void update_cpu_ticks(struct proc *p) {
     p->last_cpu_ticks = ticks - p->start_session_ticks;
-    p->mean_ticks = ((10 - rate) * p->mean_ticks + p->last_cpu_ticks * (rate)) / 10;
+    p->mean_ticks = ((10 - rate) * p->mean_ticks + p->last_cpu_ticks * rate) / 10;
     p->start_session_ticks = ticks;
 }
 
