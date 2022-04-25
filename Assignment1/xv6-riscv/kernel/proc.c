@@ -176,6 +176,14 @@ freeproc(struct proc *p)
   p->killed = 0;
   p->xstate = 0;
   p->state = UNUSED;
+  p->last_runnable_time = 0;
+  p->last_cpu_ticks = 0;
+  p->start_session_ticks = 0;
+  p->runnable_time = 0;
+  p->mean_ticks = 0;
+  p->runnable_time = 0;
+  p->running_time = 0;
+  p->sleeping_time = 0;
 }
 
 // Create a user page table for a given process,
@@ -847,10 +855,10 @@ void update_cpu_ticks(struct proc *p) {
 }
 
 void print_stats(){
-    printf("the mean running time is %d\n", running_processes_mean);
-    printf("the number_process %d\n", number_process);
-    printf("the mean runnable time is %d\n", runnable_processes_mean);
-    printf("the mean sleeping time is %d\n", sleeping_processes_mean);
-    printf("the CPU utilization running time is %d\n", cpu_utilization);
-    printf("the Global running time is %d\n", program_time);
+    printf("The mean running time is %d\n", running_processes_mean);
+    printf("The number process %d\n", number_process);
+    printf("The mean runnable time is %d\n", runnable_processes_mean);
+    printf("The mean sleeping time is %d\n", sleeping_processes_mean);
+    printf("The CPU utilization running time is %d\n", cpu_utilization);
+    printf("The Global running time is %d\n", program_time);
 }
