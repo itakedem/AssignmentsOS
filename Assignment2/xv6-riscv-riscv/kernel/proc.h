@@ -95,6 +95,7 @@ struct proc {
   int pid;                     // Process ID
   volatile int cpu_num;                 // Process's CPU
   volatile int next_proc_id;               // next proc in list
+  int proc_index;           //index in procs array
 
   // wait_lock must be held when using this:
   struct proc *parent;         // Parent process
