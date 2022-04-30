@@ -669,7 +669,12 @@ procdump(void)
 int
 set_cpu(int cpu_num)
 {
-    return 0;
+    struct proc* p = myproc();
+    if(cas(&p->cpu_num, p->cpu_num, cpu_num) !=0)
+        return -1;
+    yield();
+    panic("changed cpu here"); //TODO:delete
+    return cpu_num;
 }
 
 int

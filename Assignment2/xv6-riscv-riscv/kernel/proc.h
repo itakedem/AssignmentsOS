@@ -93,7 +93,7 @@ struct proc {
   int killed;                  // If non-zero, have been killed
   int xstate;                  // Exit status to be returned to parent's wait
   int pid;                     // Process ID
-  int cpu_num;                 // Process's CPU
+  volatile int cpu_num;                 // Process's CPU
   volatile int next_proc_id;               // next proc in list
 
   // wait_lock must be held when using this:
