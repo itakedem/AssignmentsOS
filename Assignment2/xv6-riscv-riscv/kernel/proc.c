@@ -455,17 +455,26 @@ scheduler(void)
   for(;;){
     // Avoid deadlock by ensuring that devices can interrupt.
     intr_on();
-    while(c->runnable_first_proc_id != -1){   //TODO:change to if? never reaches intr_on() if the list is not empty
+    if(c->runnable_first_proc_id != -1){
       p = &proc[c->runnable_first_proc_id];
       acquire(&p->lock);
+        printf("before remove p index %d\n",p->proc_index);
+        printf("next p index %d\n",p->next_proc_id);
+        printf("first runnable %d\n",c->runnable_first_proc_id);
       remove_proc_from_list(&c->runnable_first_proc_id, p);
       p->state = RUNNING;
-
       c->proc = p;
       swtch(&c->context, &p->context);
       // Process is done running for now.
       // It should have changed its p->state before coming back.
+        printf("after remove p index %d\n",p->proc_index);
+        printf("next p index %d\n",p->next_proc_id);
+        printf("first runnable %d\n",c->runnable_first_proc_id);
+
       add_proc_to_list(&c->runnable_first_proc_id, p);
+        printf("after add p index %d\n",p->proc_index);
+        printf("next p index %d\n",p->next_proc_id);
+        printf("first runnable %d\n",c->runnable_first_proc_id);
       c->proc = 0;
       release(&p->lock);
     }
@@ -693,12 +702,14 @@ get_cpu()
 
 int add_proc_to_list(volatile int* first_proc_id, struct proc* new_proc){
     if(*first_proc_id == -1){ //list is empty
-        if(cas(first_proc_id, -1, new_proc->proc_index) == 0) //not successful = someone else added before me
+        if(cas(first_proc_id, -1, new_proc->proc_index) == 0) { //not successful = someone else added before me
             return 0;
+        }
     }
     int result = add_proc_to_list_rec(&proc[*first_proc_id], new_proc);
-    if(result == -2) //start over
+    if(result == -2) {//start over
         return add_proc_to_list(first_proc_id, new_proc);
+    }
     return result;
 }
 
@@ -720,6 +731,10 @@ int remove_proc_from_list(volatile int* first_proc_id, struct proc* new_proc) {
     if (*first_proc_id == -1)
         panic("new proc is not in list");
     if (*first_proc_id == new_proc->proc_index) { //first on the list
+        printf("***************************************\n");
+        printf("p index %d\n",new_proc->proc_index);
+        printf("next p index %d\n",new_proc->next_proc_id);
+        printf("first runnable %d\n",*first_proc_id);
         if (cas(first_proc_id, new_proc->proc_index, new_proc->next_proc_id) == 0) //not successful = someone else added to the list
         {
             new_proc->next_proc_id = -1;
@@ -727,11 +742,12 @@ int remove_proc_from_list(volatile int* first_proc_id, struct proc* new_proc) {
         }
     }
     int result = remove_proc_from_list_rec(&proc[*first_proc_id], new_proc);
-    if(result == -2) //start over
-       return remove_proc_from_list(first_proc_id, new_proc);
+    if(result == -2) {//start over
+        return remove_proc_from_list(first_proc_id, new_proc);
+    }
     return result;
 }
-
+//TODO:we think the problem is in the remove
 int remove_proc_from_list_rec(struct proc* curr_proc, struct proc* new_proc){ //todo:maybe need to remove interapts
     if(curr_proc->next_proc_id == -1)
         panic("new proc is not in list");
