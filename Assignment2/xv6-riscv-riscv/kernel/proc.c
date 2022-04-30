@@ -14,6 +14,9 @@ struct proc *initproc;
 
 volatile int nextpid = 1;
 struct spinlock pid_lock;
+volatile int zombie_first_proc_id = -1;
+volatile int sleeping_first_proc_id = -1;
+volatile int unused_first_proc_id = -1;
 
 extern void forkret(void);
 static void freeproc(struct proc *p);
@@ -162,6 +165,7 @@ freeproc(struct proc *p)
   p->killed = 0;
   p->xstate = 0;
   p->state = UNUSED;
+  add_proc_to_list(unused_first_proc_id, p);
 }
 
 // Create a user page table for a given process,
@@ -307,10 +311,12 @@ fork(void)
 
   acquire(&wait_lock);
   np->parent = p;
+  np->cpu_num = p->cpu_num;
   release(&wait_lock);
 
   acquire(&np->lock);
   np->state = RUNNABLE;
+  add_proc_to_list(cpus[np->cpu_num].runnable_first_proc_id, np);
   release(&np->lock);
 
   return pid;
@@ -368,6 +374,7 @@ exit(int status)
 
   p->xstate = status;
   p->state = ZOMBIE;
+  add_proc_to_list(zombie_first_proc_id, p);
 
   release(&wait_lock);
 
@@ -405,6 +412,7 @@ wait(uint64 addr)
             release(&wait_lock);
             return -1;
           }
+          remove_proc_from_list(zombie_first_proc_id, np);
           freeproc(np);
           release(&np->lock);
           release(&wait_lock);
@@ -437,26 +445,25 @@ scheduler(void)
 {
   struct proc *p;
   struct cpu *c = mycpu();
-  
+  c->runnable_first_proc_id = -1;
   c->proc = 0;
   for(;;){
     // Avoid deadlock by ensuring that devices can interrupt.
     intr_on();
 
-    for(p = proc; p < &proc[NPROC]; p++) {
+    while(runnable_first_proc_id != -1){   //TODO:change to if? never reaches intr_on() if the list is not empty
+      p = &proc[runnable_first_proc_id];
       acquire(&p->lock);
-      if(p->state == RUNNABLE) {
-        // Switch to chosen process.  It is the process's job
-        // to release its lock and then reacquire it
-        // before jumping back to us.
-        p->state = RUNNING;
-        c->proc = p;
-        swtch(&c->context, &p->context);
+      remove_proc_from_list(runnable_first_proc_id, p);
+      p->state = RUNNING;
 
-        // Process is done running for now.
-        // It should have changed its p->state before coming back.
-        c->proc = 0;
-      }
+      c->proc = p;
+      swtch(&c->context, &p->context);
+
+      // Process is done running for now.
+      // It should have changed its p->state before coming back.
+      add_proc_to_list(runnable_first_proc_id, p);
+      c->proc = 0;
       release(&p->lock);
     }
   }
@@ -541,6 +548,7 @@ sleep(void *chan, struct spinlock *lk)
   // Go to sleep.
   p->chan = chan;
   p->state = SLEEPING;
+  add_proc_to_list(sleeping_first_proc_id, p);
 
   sched();
 
@@ -563,7 +571,9 @@ wakeup(void *chan)
     if(p != myproc()){
       acquire(&p->lock);
       if(p->state == SLEEPING && p->chan == chan) {
-        p->state = RUNNABLE;
+          remove_proc_from_list(sleeping_first_proc_id, p);
+          p->state = RUNNABLE;
+          add_proc_to_list(cpus[p->cpu_num].runnable_first_proc_id, p);
       }
       release(&p->lock);
     }
@@ -584,7 +594,9 @@ kill(int pid)
       p->killed = 1;
       if(p->state == SLEEPING){
         // Wake process from sleep().
+        remove_proc_from_list(sleeping_first_proc_id, p);
         p->state = RUNNABLE;
+        add_proc_to_list(cpus[p->cpu_num].runnable_first_proc_id, p);
       }
       release(&p->lock);
       return 0;
