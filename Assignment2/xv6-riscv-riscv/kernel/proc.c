@@ -51,6 +51,7 @@ void
 procinit(void)
 {
   struct proc *p;
+  struct cpu *c;
   initlock(&pid_lock, "nextpid");
   initlock(&wait_lock, "wait_lock");
   int i = -1;
@@ -62,6 +63,9 @@ procinit(void)
       p->next_proc_id = -1;
       add_proc_to_list(&unused_first_proc_id, p);
   }
+    for(c = cpus; c < &cpus[NCPU]; c++) {
+        c->runnable_first_proc_id = -1;
+    }
 }
 
 // Must be called with interrupts disabled,
@@ -249,7 +253,6 @@ userinit(void)
   p->cwd = namei("/");
   p->state = RUNNABLE;
   add_proc_to_list(&cpus[0].runnable_first_proc_id, p);
-
   release(&p->lock);
 }
 
@@ -448,8 +451,6 @@ scheduler(void)
 {
   struct proc *p;
   struct cpu *c = mycpu();
-  printf("cpu=%d",c->runnable_first_proc_id);
-  c->runnable_first_proc_id = -1;
   c->proc = 0;
   for(;;){
     // Avoid deadlock by ensuring that devices can interrupt.
@@ -462,7 +463,6 @@ scheduler(void)
 
       c->proc = p;
       swtch(&c->context, &p->context);
-
       // Process is done running for now.
       // It should have changed its p->state before coming back.
       add_proc_to_list(&c->runnable_first_proc_id, p);
