@@ -504,7 +504,6 @@ void start_running_process(struct proc *p, struct cpu *c) {
     p->runnable_time += (ticks - p->start_session_ticks);
     p->start_session_ticks = ticks;
     swtch(&c->context, &p->context);
-    //printf("%d\n",(p->state==RUNNABLE)); test that there are no interrupts
 }
 
 void
