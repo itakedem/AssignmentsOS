@@ -106,10 +106,11 @@ int             either_copyin(void *dst, int user_src, uint64 src, uint64 len);
 void            procdump(void);
 int             set_cpu(int);
 int             get_cpu();
-int             add_proc_to_list(volatile int* first_proc_id, struct proc* new_proc);
+int             add_proc_to_list(volatile int* first_proc_id, struct proc* new_proc, struct spinlock* first_lock);
 int             add_proc_to_list_rec(struct proc* curr_proc, struct proc* new_proc);
-int             remove_proc_from_list(volatile int* first_proc_id, struct proc* new_proc);
-int             remove_proc_from_list_rec(struct proc* curr_proc, struct proc* new_proc);
+int             remove_proc_from_list(volatile int* first_proc_id, struct proc* remove_proc, struct spinlock* first_lock);
+int             remove_proc_from_list_rec(struct proc* curr_proc, struct proc* remove_proc);
+void            init_lists_locks();
 
 // swtch.S
 void            swtch(struct context*, struct context*);

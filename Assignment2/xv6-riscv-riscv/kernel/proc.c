@@ -17,6 +17,8 @@ struct spinlock pid_lock;
 volatile int zombie_first_proc_id = -1;
 volatile int sleeping_first_proc_id = -1;
 volatile int unused_first_proc_id = -1;
+struct spinlock zombie_lock, sleeping_lock, unused_lock;
+
 
 extern void forkret(void);
 static void freeproc(struct proc *p);
@@ -50,6 +52,7 @@ proc_mapstacks(pagetable_t kpgtbl) {
 void
 procinit(void)
 {
+  init_lists_locks();
   struct proc *p;
   struct cpu *c;
   initlock(&pid_lock, "nextpid");
@@ -58,16 +61,22 @@ procinit(void)
   for(p = proc; p < &proc[NPROC]; p++) {
       i++;
       initlock(&p->lock, "proc");
+      initlock(&p->node_lock, "node");
       p->kstack = KSTACK((int) (p - proc));
       p->proc_index = i;
       p->next_proc_id = -1;
-      add_proc_to_list(&unused_first_proc_id, p);
+      add_proc_to_list(&unused_first_proc_id, p, &unused_lock);
   }
     for(c = cpus; c < &cpus[NCPU]; c++) {
         c->runnable_first_proc_id = -1;
+        initlock(&c->head_node_lock, "runnable_node");
     }
 }
-
+void init_lists_locks(){
+    initlock(&zombie_lock, "zombie");
+    initlock(&unused_lock, "unused");
+    initlock(&sleeping_lock, "sleeping");
+}
 // Must be called with interrupts disabled,
 // to prevent race with process being moved
 // to a different CPU.
@@ -125,7 +134,7 @@ allocproc(void)
 
 found:
   p->pid = allocpid();
-  remove_proc_from_list(&unused_first_proc_id, p);
+  remove_proc_from_list(&unused_first_proc_id, p, &unused_lock);
   p->state = USED;
 
   // Allocate a trapframe page.
@@ -171,9 +180,9 @@ freeproc(struct proc *p)
   p->chan = 0;
   p->killed = 0;
   p->xstate = 0;
-  remove_proc_from_list(&zombie_first_proc_id, p);
+  remove_proc_from_list(&zombie_first_proc_id, p, &zombie_lock);
   p->state = UNUSED;
-  add_proc_to_list(&unused_first_proc_id, p);
+  add_proc_to_list(&unused_first_proc_id, p, &unused_lock);
 }
 
 // Create a user page table for a given process,
@@ -252,7 +261,7 @@ userinit(void)
   safestrcpy(p->name, "initcode", sizeof(p->name));
   p->cwd = namei("/");
   p->state = RUNNABLE;
-  add_proc_to_list(&cpus[0].runnable_first_proc_id, p);
+  add_proc_to_list(&cpus[0].runnable_first_proc_id, p, &cpus[0].head_node_lock);
   release(&p->lock);
 }
 
@@ -323,7 +332,7 @@ fork(void)
 
   acquire(&np->lock);
   np->state = RUNNABLE;
-  add_proc_to_list(&cpus[np->cpu_num].runnable_first_proc_id, np);
+  add_proc_to_list(&cpus[np->cpu_num].runnable_first_proc_id, np, &cpus[np->cpu_num].head_node_lock);
   release(&np->lock);
 
   return pid;
@@ -381,7 +390,7 @@ exit(int status)
 
   p->xstate = status;
   p->state = ZOMBIE;
-  add_proc_to_list(&zombie_first_proc_id, p);
+  add_proc_to_list(&zombie_first_proc_id, p, &zombie_lock);
 
   release(&wait_lock);
 
@@ -458,23 +467,14 @@ scheduler(void)
     if(c->runnable_first_proc_id != -1){
       p = &proc[c->runnable_first_proc_id];
       acquire(&p->lock);
-        printf("before remove p index %d\n",p->proc_index);
-        printf("next p index %d\n",p->next_proc_id);
-        printf("first runnable %d\n",c->runnable_first_proc_id);
-      remove_proc_from_list(&c->runnable_first_proc_id, p);
+      remove_proc_from_list(&c->runnable_first_proc_id, p, &c->head_node_lock);
       p->state = RUNNING;
       c->proc = p;
       swtch(&c->context, &p->context);
       // Process is done running for now.
       // It should have changed its p->state before coming back.
-        printf("after remove p index %d\n",p->proc_index);
-        printf("next p index %d\n",p->next_proc_id);
-        printf("first runnable %d\n",c->runnable_first_proc_id);
 
-      add_proc_to_list(&c->runnable_first_proc_id, p);
-        printf("after add p index %d\n",p->proc_index);
-        printf("next p index %d\n",p->next_proc_id);
-        printf("first runnable %d\n",c->runnable_first_proc_id);
+      add_proc_to_list(&c->runnable_first_proc_id, p, &c->head_node_lock);
       c->proc = 0;
       release(&p->lock);
     }
@@ -560,7 +560,7 @@ sleep(void *chan, struct spinlock *lk)
   // Go to sleep.
   p->chan = chan;
   p->state = SLEEPING;
-  add_proc_to_list(&sleeping_first_proc_id, p);
+  add_proc_to_list(&sleeping_first_proc_id, p, &sleeping_lock);
 
   sched();
 
@@ -578,14 +578,14 @@ void
 wakeup(void *chan)
 {
   struct proc *p;
-
+  struct cpu* c = mycpu();
   for(p = proc; p < &proc[NPROC]; p++) {
     if(p != myproc()){
       acquire(&p->lock);
       if(p->state == SLEEPING && p->chan == chan) {
-          remove_proc_from_list(&sleeping_first_proc_id, p);
+          remove_proc_from_list(&sleeping_first_proc_id, p, &sleeping_lock);
           p->state = RUNNABLE;
-          add_proc_to_list(&cpus[p->cpu_num].runnable_first_proc_id, p);
+          add_proc_to_list(&cpus[p->cpu_num].runnable_first_proc_id, p, &c->head_node_lock);
       }
       release(&p->lock);
     }
@@ -599,16 +599,16 @@ int
 kill(int pid)
 {
   struct proc *p;
-
+  struct cpu *c = mycpu();
   for(p = proc; p < &proc[NPROC]; p++){
     acquire(&p->lock);
     if(p->pid == pid){
       p->killed = 1;
       if(p->state == SLEEPING){
         // Wake process from sleep().
-        remove_proc_from_list(&sleeping_first_proc_id, p);
+        remove_proc_from_list(&sleeping_first_proc_id, p, &sleeping_lock);
         p->state = RUNNABLE;
-        add_proc_to_list(&cpus[p->cpu_num].runnable_first_proc_id, p);
+        add_proc_to_list(&cpus[p->cpu_num].runnable_first_proc_id, p, &c->head_node_lock);
       }
       release(&p->lock);
       return 0;
@@ -700,68 +700,140 @@ get_cpu()
     return cpu_num;
 }
 
-int add_proc_to_list(volatile int* first_proc_id, struct proc* new_proc){
-    if(*first_proc_id == -1){ //list is empty
-        if(cas(first_proc_id, -1, new_proc->proc_index) == 0) { //not successful = someone else added before me
-            return 0;
-        }
+//int add_proc_to_list(volatile int* first_proc_id, struct proc* new_proc){
+//    if(*first_proc_id == -1){ //list is empty
+//        if(cas(first_proc_id, -1, new_proc->proc_index) == 0) { //not successful = someone else added before me
+//            return 0;
+//        }
+//    }
+//    int result = add_proc_to_list_rec(&proc[*first_proc_id], new_proc);
+//    if(result == -2) {//start over
+//        return add_proc_to_list(first_proc_id, new_proc);
+//    }
+//    return result;
+//}
+//
+//int add_proc_to_list_rec(struct proc* curr_proc, struct proc* new_proc){ //todo:maybe need to remove interapts
+//    if (curr_proc->state != new_proc->state)
+//        return -2;      //curr_proc is no longer in the desired list for new proc
+//
+//    if(curr_proc->next_proc_id == -1) {
+//        if (cas(&curr_proc->next_proc_id, -1, new_proc->proc_index) ==
+//            0) {//not successful = someone else added before me
+//            return 0;
+//        }
+//    }
+//
+//    return add_proc_to_list_rec(&proc[curr_proc->next_proc_id], new_proc);
+//}
+//
+//int remove_proc_from_list(volatile int* first_proc_id, struct proc* new_proc) {
+//    if (*first_proc_id == -1)
+//        panic("new proc is not in list");
+//    if (*first_proc_id == new_proc->proc_index) { //first on the list
+//        if (cas(first_proc_id, new_proc->proc_index, new_proc->next_proc_id) == 0) //not successful = someone else added to the list
+//        {
+//            new_proc->next_proc_id = -1;
+//            return 0;
+//        }
+//    }
+//    int result = remove_proc_from_list_rec(&proc[*first_proc_id], new_proc);
+//    if(result == -2) {//start over
+//        return remove_proc_from_list(first_proc_id, new_proc);
+//    }
+//    return result;
+//}
+////TODO:we think the problem is in the remove
+//int remove_proc_from_list_rec(struct proc* curr_proc, struct proc* new_proc){ //todo:maybe need to remove interapts
+//    if(curr_proc->next_proc_id == -1)
+//        panic("new proc is not in list");
+//
+//    if (curr_proc->state != new_proc->state)  //curr_proc is no longer in the desired list for new proc
+//        return -2;
+//
+//    if(curr_proc->next_proc_id == new_proc->proc_index){
+//        if(cas(&curr_proc->next_proc_id, new_proc->proc_index, new_proc->next_proc_id) == 0) {//not successful = someone else removed my father
+//            new_proc->next_proc_id = -1;
+//            return 0;
+//        }
+//        else
+//            return -2; //find the new father (start over)
+//    }
+//    return remove_proc_from_list_rec(&proc[curr_proc->next_proc_id], new_proc);
+//}
+
+
+int add_proc_to_list(volatile int* first_proc_id, struct proc* new_proc, struct spinlock* first_lock) {
+    int result;
+    acquire(first_lock);
+    if(*first_proc_id == -1){
+        result = cas(first_proc_id, -1, new_proc->proc_index) == 0;
+        release(first_lock);
+        return result;
     }
-    int result = add_proc_to_list_rec(&proc[*first_proc_id], new_proc);
-    if(result == -2) {//start over
-        return add_proc_to_list(first_proc_id, new_proc);
-    }
+    release(first_lock);
+    result = add_proc_to_list_rec(&proc[*first_proc_id], new_proc);
+    if(result == 2)
+        return add_proc_to_list(first_proc_id, new_proc, first_lock);
     return result;
 }
 
-int add_proc_to_list_rec(struct proc* curr_proc, struct proc* new_proc){ //todo:maybe need to remove interapts
-    if (curr_proc->state != new_proc->state)
-        return -2;      //curr_proc is no longer in the desired list for new proc
-
-    if(curr_proc->next_proc_id == -1) {
-        if (cas(&curr_proc->next_proc_id, -1, new_proc->proc_index) ==
-            0) {//not successful = someone else added before me
-            return 0;
-        }
+int add_proc_to_list_rec(struct proc* curr_proc, struct proc* new_proc) {
+    int result;
+    acquire(&curr_proc->node_lock);
+    if(curr_proc->state != new_proc->state)  //someone removed the proc between calls to the function
+    {
+        release(&curr_proc->node_lock);
+        return 2;
     }
-
+    if(curr_proc->next_proc_id == -1){
+        result = cas(&curr_proc->next_proc_id, -1, new_proc->proc_index) == 0;
+        release(&curr_proc->node_lock);
+        return result;
+    }
+    release(&curr_proc->node_lock);
     return add_proc_to_list_rec(&proc[curr_proc->next_proc_id], new_proc);
 }
 
-int remove_proc_from_list(volatile int* first_proc_id, struct proc* new_proc) {
-    if (*first_proc_id == -1)
-        panic("new proc is not in list");
-    if (*first_proc_id == new_proc->proc_index) { //first on the list
-        printf("***************************************\n");
-        printf("p index %d\n",new_proc->proc_index);
-        printf("next p index %d\n",new_proc->next_proc_id);
-        printf("first runnable %d\n",*first_proc_id);
-        if (cas(first_proc_id, new_proc->proc_index, new_proc->next_proc_id) == 0) //not successful = someone else added to the list
-        {
-            new_proc->next_proc_id = -1;
-            return 0;
-        }
+int remove_proc_from_list(volatile int* first_proc_id, struct proc* remove_proc, struct spinlock* first_lock) {
+    int result;
+    acquire(first_lock);
+    acquire(&remove_proc->node_lock);
+    if(*first_proc_id == -1)
+        panic("list is empty");
+    if(*first_proc_id == remove_proc->proc_index){
+        result = cas(first_proc_id, remove_proc->proc_index, remove_proc->next_proc_id) == 0;
+        release(&remove_proc->node_lock);
+        release(first_lock);
+        return result;
     }
-    int result = remove_proc_from_list_rec(&proc[*first_proc_id], new_proc);
-    if(result == -2) {//start over
-        return remove_proc_from_list(first_proc_id, new_proc);
+    result = remove_proc_from_list_rec(&proc[*first_proc_id], remove_proc);
+    if(result == 2){
+        release(&remove_proc->node_lock);
+        release(first_lock);
+        return remove_proc_from_list(first_proc_id, remove_proc, first_lock);
     }
+    release(&remove_proc->node_lock);
+    release(first_lock);
     return result;
+
 }
-//TODO:we think the problem is in the remove
-int remove_proc_from_list_rec(struct proc* curr_proc, struct proc* new_proc){ //todo:maybe need to remove interapts
-    if(curr_proc->next_proc_id == -1)
-        panic("new proc is not in list");
 
-    if (curr_proc->state != new_proc->state)  //curr_proc is no longer in the desired list for new proc
-        return -2;
 
-    if(curr_proc->next_proc_id == new_proc->proc_index){
-        if(cas(&curr_proc->next_proc_id, new_proc->proc_index, new_proc->next_proc_id) == 0) {//not successful = someone else removed my father
-            new_proc->next_proc_id = -1;
-            return 0;
-        }
-        else
-            return -2; //find the new father (start over)
+int remove_proc_from_list_rec(struct proc* curr_proc, struct proc* remove_proc) {
+    int result;
+    acquire(&curr_proc->node_lock);
+    if(curr_proc->state != remove_proc->state){
+        release(&curr_proc->node_lock);
+        return 2;
     }
-    return remove_proc_from_list_rec(&proc[curr_proc->next_proc_id], new_proc);
+    if(curr_proc->next_proc_id == remove_proc->proc_index){
+        acquire(&remove_proc->node_lock);
+        result = cas(&curr_proc->next_proc_id, remove_proc->proc_index, remove_proc->next_proc_id) == 0;
+        release(&remove_proc->node_lock);
+        release(&curr_proc->node_lock);
+        return result;
+    }
+    release(&curr_proc->node_lock);
+    return remove_proc_from_list_rec(&proc[curr_proc->next_proc_id], remove_proc);
 }

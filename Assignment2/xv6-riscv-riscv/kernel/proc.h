@@ -25,6 +25,7 @@ struct cpu {
   int noff;                   // Depth of push_off() nesting.
   int intena;                 // Were interrupts enabled before push_off()?
   volatile int runnable_first_proc_id;              //first proc on runnable list
+  struct spinlock head_node_lock;
 };
 
 extern struct cpu cpus[NCPU];
@@ -94,6 +95,7 @@ struct proc {
   int xstate;                  // Exit status to be returned to parent's wait
   int pid;                     // Process ID
   volatile int cpu_num;                 // Process's CPU
+  struct spinlock node_lock;
   volatile int next_proc_id;               // next proc in list
   int proc_index;           //index in procs array
 
