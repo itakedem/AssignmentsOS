@@ -111,6 +111,7 @@ int             add_proc_to_list_rec(struct proc* curr_proc, struct proc* new_pr
 int             remove_proc_from_list(volatile int* first_proc_id, struct proc* remove_proc, struct spinlock* first_lock);
 int             remove_proc_from_list_rec(struct proc* curr_proc, struct proc* remove_proc);
 void            init_lists_locks();
+void printproc(struct proc* p);
 
 // swtch.S
 void            swtch(struct context*, struct context*);

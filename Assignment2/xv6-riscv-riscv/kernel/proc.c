@@ -474,7 +474,8 @@ scheduler(void)
       // Process is done running for now.
       // It should have changed its p->state before coming back.
 
-      add_proc_to_list(&c->runnable_first_proc_id, p, &c->head_node_lock);
+//      add_proc_to_list(&c->runnable_first_proc_id, p, &c->head_node_lock);
+
       c->proc = 0;
       release(&p->lock);
     }
@@ -513,8 +514,10 @@ void
 yield(void)
 {
   struct proc *p = myproc();
+  struct cpu *c = mycpu();
   acquire(&p->lock);
   p->state = RUNNABLE;
+  add_proc_to_list(&c->runnable_first_proc_id, p, &c->head_node_lock);
   sched();
   release(&p->lock);
 }
@@ -609,6 +612,7 @@ kill(int pid)
         remove_proc_from_list(&sleeping_first_proc_id, p, &sleeping_lock);
         p->state = RUNNABLE;
         add_proc_to_list(&cpus[p->cpu_num].runnable_first_proc_id, p, &c->head_node_lock);
+
       }
       release(&p->lock);
       return 0;
@@ -685,7 +689,6 @@ set_cpu(int cpu_num)
     if(cas(&p->cpu_num, p->cpu_num, cpu_num) !=0)
         return -1;
     yield();
-    panic("changed cpu here"); //TODO:delete
     return cpu_num;
 }
 
@@ -803,18 +806,18 @@ int remove_proc_from_list(volatile int* first_proc_id, struct proc* remove_proc,
         panic("list is empty");
     if(*first_proc_id == remove_proc->proc_index){
         result = cas(first_proc_id, remove_proc->proc_index, remove_proc->next_proc_id) == 0;
+        remove_proc->next_proc_id = -1;
         release(&remove_proc->node_lock);
         release(first_lock);
         return result;
     }
-    result = remove_proc_from_list_rec(&proc[*first_proc_id], remove_proc);
-    if(result == 2){
-        release(&remove_proc->node_lock);
-        release(first_lock);
-        return remove_proc_from_list(first_proc_id, remove_proc, first_lock);
-    }
     release(&remove_proc->node_lock);
     release(first_lock);
+    result = remove_proc_from_list_rec(&proc[*first_proc_id], remove_proc);
+    if(result == 2){
+        return remove_proc_from_list(first_proc_id, remove_proc, first_lock);
+    }
+    remove_proc->next_proc_id = -1;  //TODO:add lock before changing
     return result;
 
 }
@@ -836,4 +839,21 @@ int remove_proc_from_list_rec(struct proc* curr_proc, struct proc* remove_proc) 
     }
     release(&curr_proc->node_lock);
     return remove_proc_from_list_rec(&proc[curr_proc->next_proc_id], remove_proc);
+}
+
+
+void printproc(struct proc* p){
+    char* state;
+    if(p->state == RUNNABLE)
+        state = "runnable";
+    if(p->state == UNUSED)
+        state = "unused";
+    if(p->state == RUNNING)
+        state = "running";
+    if(p->state == SLEEPING)
+        state = "sleeping";
+    if(p->state == ZOMBIE)
+        state = "zombie";
+
+    printf("proc:%d, next proc=%d, state=%s\n", p->proc_index, p->next_proc_id, state);
 }
