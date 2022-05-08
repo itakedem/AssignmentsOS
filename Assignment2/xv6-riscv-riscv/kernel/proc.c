@@ -471,6 +471,7 @@ wait(uint64 addr)
 void
 scheduler(void)
 {
+  num_active_cpu ++;
   struct proc *p;
   struct cpu *c = mycpu();
   c->proc = 0;
@@ -491,7 +492,7 @@ scheduler(void)
       c->proc = 0;
       release(&p->lock);
     }
-    else
+    else if(is_balanced)
         steal_proc();
   }
 }
@@ -500,12 +501,15 @@ scheduler(void)
 void steal_proc(){
     struct cpu *c = mycpu();
     for (int i = 0; i < num_active_cpu; i++){
-        if(c->runnable_first_proc_id == -1)
+        if(cpus[i].runnable_first_proc_id == -1)
             continue;
         struct proc* steal_proc = &proc[c->runnable_first_proc_id];
+        printf("cpu = %d , list = %d", i, cpus[i].runnable_first_proc_id );
         if(remove_proc_from_list(&c->runnable_first_proc_id, steal_proc, &c->head_node_lock) == 0){
             update_num_process(&cpus[i], -1);
+            printf("hi");
             acquire(&steal_proc->lock);
+            printf("hi2");
             steal_proc->state = RUNNING;
             update_num_process(c, 1);
             c->proc = steal_proc;
@@ -792,7 +796,11 @@ int remove_proc_from_list(volatile int* first_proc_id, struct proc* remove_proc,
     acquire(first_lock);
     acquire(&remove_proc->node_lock);
     if(*first_proc_id == -1) //list is empty
+    {
+        release(first_lock);
+        release(&remove_proc->node_lock);
         return -1;
+    }
     if(*first_proc_id == remove_proc->proc_index){
         result = cas(first_proc_id, remove_proc->proc_index, remove_proc->next_proc_id) == 0;
         remove_proc->next_proc_id = -1;
