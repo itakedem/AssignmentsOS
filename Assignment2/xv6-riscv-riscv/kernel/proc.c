@@ -771,26 +771,20 @@ int add_proc_to_list(volatile int* first_proc_id, struct proc* new_proc, struct 
         release(first_lock);
         return result;
     }
+    acquire(&proc[*first_proc_id].node_lock);
     release(first_lock);
     result = add_proc_to_list_rec(&proc[*first_proc_id], new_proc);
-    if(result == 2)
-        return add_proc_to_list(first_proc_id, new_proc, first_lock);
     return result;
 }
 
 int add_proc_to_list_rec(struct proc* curr_proc, struct proc* new_proc) {
     int result;
-    acquire(&curr_proc->node_lock);
-    if(curr_proc->state != new_proc->state)  //someone removed the proc between calls to the function
-    {
-        release(&curr_proc->node_lock);
-        return 2;
-    }
     if(curr_proc->next_proc_id == -1){
         result = cas(&curr_proc->next_proc_id, -1, new_proc->proc_index) == 0;
         release(&curr_proc->node_lock);
         return result;
     }
+    acquire(&proc[curr_proc->next_proc_id].node_lock);
     release(&curr_proc->node_lock);
     return add_proc_to_list_rec(&proc[curr_proc->next_proc_id], new_proc);
 }
@@ -809,12 +803,10 @@ int remove_proc_from_list(volatile int* first_proc_id, struct proc* remove_proc,
         return result;
     }
     release(&remove_proc->node_lock);
+    acquire(&proc[*first_proc_id].node_lock);
     release(first_lock);
     result = remove_proc_from_list_rec(&proc[*first_proc_id], remove_proc);
-    if(result == 2){
-        return remove_proc_from_list(first_proc_id, remove_proc, first_lock);
-    }
-    remove_proc->next_proc_id = -1;  //TODO:add lock before changing
+
     return result;
 
 }
@@ -822,19 +814,17 @@ int remove_proc_from_list(volatile int* first_proc_id, struct proc* remove_proc,
 
 int remove_proc_from_list_rec(struct proc* curr_proc, struct proc* remove_proc) {
     int result;
-    acquire(&curr_proc->node_lock);
-    if(curr_proc->state != remove_proc->state){
-        release(&curr_proc->node_lock);
-        return 2;
-    }
     if(curr_proc->next_proc_id == remove_proc->proc_index){
         acquire(&remove_proc->node_lock);
         result = cas(&curr_proc->next_proc_id, remove_proc->proc_index, remove_proc->next_proc_id) == 0;
+        remove_proc->next_proc_id = -1;
         release(&remove_proc->node_lock);
         release(&curr_proc->node_lock);
         return result;
     }
+    acquire(&proc[curr_proc->next_proc_id].node_lock);
     release(&curr_proc->node_lock);
+
     return remove_proc_from_list_rec(&proc[curr_proc->next_proc_id], remove_proc);
 }
 
