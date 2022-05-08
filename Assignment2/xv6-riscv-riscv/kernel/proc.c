@@ -18,6 +18,14 @@ volatile int zombie_first_proc_id = -1;
 volatile int sleeping_first_proc_id = -1;
 volatile int unused_first_proc_id = -1;
 struct spinlock zombie_lock, sleeping_lock, unused_lock;
+int num_active_cpu = 0;
+
+#ifdef OFF
+int is_balanced = 0;
+#else
+int is_balanced =1;
+#endif
+
 
 
 extern void forkret(void);
@@ -32,9 +40,12 @@ extern uint64 cas(volatile void *addr, int expected, int newval);
 // must be acquired before any p->lock.
 struct spinlock wait_lock;
 
+
 // Allocate a page for each process's kernel stack.
 // Map it high in memory, followed by an invalid
 // guard page.
+
+
 void
 proc_mapstacks(pagetable_t kpgtbl) {
   struct proc *p;
@@ -287,56 +298,58 @@ growproc(int n)
 
 // Create a new process, copying the parent.
 // Sets up child kernel stack to return as if from fork() system call.
+
 int
 fork(void)
 {
-  int i, pid;
-  struct proc *np;
-  struct proc *p = myproc();
+    int i, pid;
+    struct proc *np;
+    struct proc *p = myproc();
 
-  // Allocate process.
-  if((np = allocproc()) == 0){
-    return -1;
-  }
+    // Allocate process.
+    if((np = allocproc()) == 0){
+        return -1;
+    }
 
-  // Copy user memory from parent to child.
-  if(uvmcopy(p->pagetable, np->pagetable, p->sz) < 0){
-    freeproc(np);
+    // Copy user memory from parent to child.
+    if(uvmcopy(p->pagetable, np->pagetable, p->sz) < 0){
+        freeproc(np);
+        release(&np->lock);
+        return -1;
+    }
+    np->sz = p->sz;
+
+    // copy saved user registers.
+    *(np->trapframe) = *(p->trapframe);
+
+    // Cause fork to return 0 in the child.
+    np->trapframe->a0 = 0;
+
+    // increment reference counts on open file descriptors.
+    for(i = 0; i < NOFILE; i++)
+        if(p->ofile[i])
+            np->ofile[i] = filedup(p->ofile[i]);
+    np->cwd = idup(p->cwd);
+
+    safestrcpy(np->name, p->name, sizeof(p->name));
+
+    pid = np->pid;
+
     release(&np->lock);
-    return -1;
-  }
-  np->sz = p->sz;
 
-  // copy saved user registers.
-  *(np->trapframe) = *(p->trapframe);
+    acquire(&wait_lock);
+    np->parent = p;
+    np->cpu_num  = update_cpu(p->cpu_num);
+    release(&wait_lock);
 
-  // Cause fork to return 0 in the child.
-  np->trapframe->a0 = 0;
+    acquire(&np->lock);
+    np->state = RUNNABLE;
+    add_proc_to_list(&cpus[np->cpu_num].runnable_first_proc_id, np, &cpus[np->cpu_num].head_node_lock);
+    release(&np->lock);
 
-  // increment reference counts on open file descriptors.
-  for(i = 0; i < NOFILE; i++)
-    if(p->ofile[i])
-      np->ofile[i] = filedup(p->ofile[i]);
-  np->cwd = idup(p->cwd);
-
-  safestrcpy(np->name, p->name, sizeof(p->name));
-
-  pid = np->pid;
-
-  release(&np->lock);
-
-  acquire(&wait_lock);
-  np->parent = p;
-  np->cpu_num = p->cpu_num;
-  release(&wait_lock);
-
-  acquire(&np->lock);
-  np->state = RUNNABLE;
-  add_proc_to_list(&cpus[np->cpu_num].runnable_first_proc_id, np, &cpus[np->cpu_num].head_node_lock);
-  release(&np->lock);
-
-  return pid;
+    return pid;
 }
+
 
 // Pass p's abandoned children to init.
 // Caller must hold wait_lock.
@@ -576,6 +589,7 @@ sleep(void *chan, struct spinlock *lk)
 
 // Wake up all processes sleeping on chan.
 // Must be called without any p->lock.
+
 void
 wakeup(void *chan)
 {
@@ -586,6 +600,7 @@ wakeup(void *chan)
       if(p->state == SLEEPING && p->chan == chan) {
           remove_proc_from_list(&sleeping_first_proc_id, p, &sleeping_lock);
           p->state = RUNNABLE;
+          p->cpu_num = update_cpu(p->cpu_num);
           add_proc_to_list(&cpus[p->cpu_num].runnable_first_proc_id, p, &cpus[p->cpu_num].head_node_lock);
       }
       release(&p->lock);
@@ -593,6 +608,24 @@ wakeup(void *chan)
   }
 }
 
+
+int least_used_cpu(){
+    int least_used = 0;
+    int amount_least = cpus[0].process_counter;
+    for(int i = 1; i < num_active_cpu; i++){
+        if (amount_least > cpus[i].process_counter){
+            least_used = i;
+            amount_least = cpus[i].process_counter;
+        }
+    }
+    return least_used;
+}
+
+int update_cpu(int cpu_id){
+    if (is_balanced)
+        return least_used_cpu();
+    return cpu_id;
+}
 // Kill the process with the given pid.
 // The victim won't exit until it tries to return
 // to user space (see usertrap() in trap.c).
@@ -700,67 +733,6 @@ get_cpu()
     return cpu_num;
 }
 
-//int add_proc_to_list(volatile int* first_proc_id, struct proc* new_proc){
-//    if(*first_proc_id == -1){ //list is empty
-//        if(cas(first_proc_id, -1, new_proc->proc_index) == 0) { //not successful = someone else added before me
-//            return 0;
-//        }
-//    }
-//    int result = add_proc_to_list_rec(&proc[*first_proc_id], new_proc);
-//    if(result == -2) {//start over
-//        return add_proc_to_list(first_proc_id, new_proc);
-//    }
-//    return result;
-//}
-//
-//int add_proc_to_list_rec(struct proc* curr_proc, struct proc* new_proc){ //todo:maybe need to remove interapts
-//    if (curr_proc->state != new_proc->state)
-//        return -2;      //curr_proc is no longer in the desired list for new proc
-//
-//    if(curr_proc->next_proc_id == -1) {
-//        if (cas(&curr_proc->next_proc_id, -1, new_proc->proc_index) ==
-//            0) {//not successful = someone else added before me
-//            return 0;
-//        }
-//    }
-//
-//    return add_proc_to_list_rec(&proc[curr_proc->next_proc_id], new_proc);
-//}
-//
-//int remove_proc_from_list(volatile int* first_proc_id, struct proc* new_proc) {
-//    if (*first_proc_id == -1)
-//        panic("new proc is not in list");
-//    if (*first_proc_id == new_proc->proc_index) { //first on the list
-//        if (cas(first_proc_id, new_proc->proc_index, new_proc->next_proc_id) == 0) //not successful = someone else added to the list
-//        {
-//            new_proc->next_proc_id = -1;
-//            return 0;
-//        }
-//    }
-//    int result = remove_proc_from_list_rec(&proc[*first_proc_id], new_proc);
-//    if(result == -2) {//start over
-//        return remove_proc_from_list(first_proc_id, new_proc);
-//    }
-//    return result;
-//}
-////TODO:we think the problem is in the remove
-//int remove_proc_from_list_rec(struct proc* curr_proc, struct proc* new_proc){ //todo:maybe need to remove interapts
-//    if(curr_proc->next_proc_id == -1)
-//        panic("new proc is not in list");
-//
-//    if (curr_proc->state != new_proc->state)  //curr_proc is no longer in the desired list for new proc
-//        return -2;
-//
-//    if(curr_proc->next_proc_id == new_proc->proc_index){
-//        if(cas(&curr_proc->next_proc_id, new_proc->proc_index, new_proc->next_proc_id) == 0) {//not successful = someone else removed my father
-//            new_proc->next_proc_id = -1;
-//            return 0;
-//        }
-//        else
-//            return -2; //find the new father (start over)
-//    }
-//    return remove_proc_from_list_rec(&proc[curr_proc->next_proc_id], new_proc);
-//}
 
 
 int add_proc_to_list(volatile int* first_proc_id, struct proc* new_proc, struct spinlock* first_lock) {
