@@ -514,10 +514,9 @@ void
 yield(void)
 {
   struct proc *p = myproc();
-  struct cpu *c = mycpu();
   acquire(&p->lock);
   p->state = RUNNABLE;
-  add_proc_to_list(&c->runnable_first_proc_id, p, &c->head_node_lock);
+  add_proc_to_list(&cpus[p->cpu_num].runnable_first_proc_id, p, &cpus[p->cpu_num].head_node_lock);
   sched();
   release(&p->lock);
 }
@@ -581,14 +580,13 @@ void
 wakeup(void *chan)
 {
   struct proc *p;
-  struct cpu* c = mycpu();
   for(p = proc; p < &proc[NPROC]; p++) {
     if(p != myproc()){
       acquire(&p->lock);
       if(p->state == SLEEPING && p->chan == chan) {
           remove_proc_from_list(&sleeping_first_proc_id, p, &sleeping_lock);
           p->state = RUNNABLE;
-          add_proc_to_list(&cpus[p->cpu_num].runnable_first_proc_id, p, &c->head_node_lock);
+          add_proc_to_list(&cpus[p->cpu_num].runnable_first_proc_id, p, &cpus[p->cpu_num].head_node_lock);
       }
       release(&p->lock);
     }
@@ -602,7 +600,6 @@ int
 kill(int pid)
 {
   struct proc *p;
-  struct cpu *c = mycpu();
   for(p = proc; p < &proc[NPROC]; p++){
     acquire(&p->lock);
     if(p->pid == pid){
@@ -611,7 +608,7 @@ kill(int pid)
         // Wake process from sleep().
         remove_proc_from_list(&sleeping_first_proc_id, p, &sleeping_lock);
         p->state = RUNNABLE;
-        add_proc_to_list(&cpus[p->cpu_num].runnable_first_proc_id, p, &c->head_node_lock);
+        add_proc_to_list(&cpus[p->cpu_num].runnable_first_proc_id, p, &cpus[p->cpu_num].head_node_lock);
 
       }
       release(&p->lock);
