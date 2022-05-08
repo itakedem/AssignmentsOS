@@ -487,13 +487,36 @@ scheduler(void)
       // Process is done running for now.
       // It should have changed its p->state before coming back.
 
-//      add_proc_to_list(&c->runnable_first_proc_id, p, &c->head_node_lock);
 
       c->proc = 0;
       release(&p->lock);
     }
+    else
+        steal_proc();
   }
 }
+
+
+void steal_proc(){
+    struct cpu *c = mycpu();
+    for (int i = 0; i < num_active_cpu; i++){
+        if(c->runnable_first_proc_id == -1)
+            continue;
+        struct proc* steal_proc = &proc[c->runnable_first_proc_id];
+        if(remove_proc_from_list(&c->runnable_first_proc_id, steal_proc, &c->head_node_lock) == 0){
+            update_num_process(&cpus[i], -1);
+            acquire(&steal_proc->lock);
+            steal_proc->state = RUNNING;
+            update_num_process(c, 1);
+            c->proc = steal_proc;
+            swtch(&c->context, &steal_proc->context);
+            c->proc = 0;
+            release(&steal_proc->lock);
+            break;
+        }
+    }
+}
+
 
 // Switch to scheduler.  Must hold only p->lock
 // and have changed proc->state. Saves and restores
@@ -575,7 +598,7 @@ sleep(void *chan, struct spinlock *lk)
   // Go to sleep.
   p->chan = chan;
   p->state = SLEEPING;
-  while(cas(&cpus[p->cpu_num].process_counter, cpus[p->cpu_num].process_counter, cpus[p->cpu_num].process_counter - 1) != 0);
+  update_num_process(&cpus[p->cpu_num], -1);
   add_proc_to_list(&sleeping_first_proc_id, p, &sleeping_lock);
 
   sched();
@@ -626,7 +649,7 @@ int update_cpu(int cpu_id){
     int new_cpu = cpu_id;
     if (is_balanced)
         new_cpu = least_used_cpu();
-    while(cas(&cpus[new_cpu].process_counter, cpus[new_cpu].process_counter, cpus[new_cpu].process_counter + 1) != 0);
+    update_num_process(&cpus[new_cpu], 1);
     return  new_cpu;
 }
 // Kill the process with the given pid.
@@ -768,8 +791,8 @@ int remove_proc_from_list(volatile int* first_proc_id, struct proc* remove_proc,
     int result;
     acquire(first_lock);
     acquire(&remove_proc->node_lock);
-    if(*first_proc_id == -1)
-        panic("list is empty");
+    if(*first_proc_id == -1) //list is empty
+        return -1;
     if(*first_proc_id == remove_proc->proc_index){
         result = cas(first_proc_id, remove_proc->proc_index, remove_proc->next_proc_id) == 0;
         remove_proc->next_proc_id = -1;
@@ -823,4 +846,8 @@ void printproc(struct proc* p){
 
 int cpu_process_count(int cpu_num){
     return cpus[cpu_num].process_counter;
+}
+
+void update_num_process(struct cpu* c, int update){
+    while(cas(&c->process_counter, c->process_counter, c->process_counter + update) != 0);
 }
