@@ -26,7 +26,7 @@ struct cpu {
   int intena;                 // Were interrupts enabled before push_off()?
   volatile int runnable_first_proc_id;              //first proc on runnable list
   struct spinlock head_node_lock;
-  uint64 process_counter;
+  volatile uint64 process_counter;
 };
 
 extern struct cpu cpus[NCPU];

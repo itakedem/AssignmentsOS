@@ -575,6 +575,7 @@ sleep(void *chan, struct spinlock *lk)
   // Go to sleep.
   p->chan = chan;
   p->state = SLEEPING;
+  while(cas(&cpus[p->cpu_num].process_counter, cpus[p->cpu_num].process_counter, cpus[p->cpu_num].process_counter - 1) != 0);
   add_proc_to_list(&sleeping_first_proc_id, p, &sleeping_lock);
 
   sched();
@@ -622,9 +623,11 @@ int least_used_cpu(){
 }
 
 int update_cpu(int cpu_id){
+    int new_cpu = cpu_id;
     if (is_balanced)
-        return least_used_cpu();
-    return cpu_id;
+        new_cpu = least_used_cpu();
+    while(cas(&cpus[new_cpu].process_counter, cpus[new_cpu].process_counter, cpus[new_cpu].process_counter + 1) != 0);
+    return  new_cpu;
 }
 // Kill the process with the given pid.
 // The victim won't exit until it tries to return

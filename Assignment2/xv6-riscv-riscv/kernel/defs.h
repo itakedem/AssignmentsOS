@@ -112,8 +112,8 @@ int             remove_proc_from_list(volatile int* first_proc_id, struct proc* 
 int             remove_proc_from_list_rec(struct proc* curr_proc, struct proc* remove_proc);
 void            init_lists_locks();
 void            printproc(struct proc* p);
-int             least_used_cpu()
-int             update_cpu(int cpu_id)
+int             least_used_cpu();
+int             update_cpu(int cpu_id);
 
 // swtch.S
 void            swtch(struct context*, struct context*);
