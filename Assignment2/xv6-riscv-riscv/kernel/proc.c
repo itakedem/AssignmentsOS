@@ -819,3 +819,8 @@ void printproc(struct proc* p){
 
     printf("proc:%d, next proc=%d, state=%s\n", p->proc_index, p->next_proc_id, state);
 }
+
+
+int cpu_process_count(int cpu_num){
+    return cpus[cpu_num].process_counter;
+}

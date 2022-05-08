@@ -114,6 +114,7 @@ void            init_lists_locks();
 void            printproc(struct proc* p);
 int             least_used_cpu();
 int             update_cpu(int cpu_id);
+int             cpu_process_count(int cpu_num);
 
 // swtch.S
 void            swtch(struct context*, struct context*);
