@@ -78,9 +78,12 @@ procinit(void)
       p->next_proc_id = -1;
       add_proc_to_list(&unused_first_proc_id, p, &unused_lock);
   }
+  i = -1;
     for(c = cpus; c < &cpus[NCPU]; c++) {
+        i++;
         c->runnable_first_proc_id = -1;
         initlock(&c->head_node_lock, "runnable_node");
+        c->cpu_index = i;
     }
 }
 void init_lists_locks(){
@@ -501,16 +504,16 @@ scheduler(void)
 void steal_proc(){
     struct cpu *c = mycpu();
     for (int i = 0; i < num_active_cpu; i++){
-        if(cpus[i].runnable_first_proc_id == -1)
+
+        if(cpus[i].runnable_first_proc_id == -1 || i == c->cpu_index)
             continue;
-        struct proc* steal_proc = &proc[c->runnable_first_proc_id];
-        printf("cpu = %d , list = %d", i, cpus[i].runnable_first_proc_id );
-        if(remove_proc_from_list(&c->runnable_first_proc_id, steal_proc, &c->head_node_lock) == 0){
-            update_num_process(&cpus[i], -1);
-            printf("hi");
+
+        struct proc* steal_proc = &proc[cpus[i].runnable_first_proc_id];
+        if(remove_proc_from_list(&cpus[i].runnable_first_proc_id, steal_proc, &cpus[i].head_node_lock) == 0){
             acquire(&steal_proc->lock);
-            printf("hi2");
+            update_num_process(&cpus[i], -1);
             steal_proc->state = RUNNING;
+            steal_proc->cpu_num = c->cpu_index;
             update_num_process(c, 1);
             c->proc = steal_proc;
             swtch(&c->context, &steal_proc->context);
