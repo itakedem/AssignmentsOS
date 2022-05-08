@@ -18,7 +18,7 @@ volatile int zombie_first_proc_id = -1;
 volatile int sleeping_first_proc_id = -1;
 volatile int unused_first_proc_id = -1;
 struct spinlock zombie_lock, sleeping_lock, unused_lock;
-int num_active_cpu = 0;
+volatile int num_active_cpu = 0;
 
 #ifdef OFF
 int is_balanced = 0;
@@ -78,12 +78,9 @@ procinit(void)
       p->next_proc_id = -1;
       add_proc_to_list(&unused_first_proc_id, p, &unused_lock);
   }
-  i = -1;
     for(c = cpus; c < &cpus[NCPU]; c++) {
-        i++;
         c->runnable_first_proc_id = -1;
         initlock(&c->head_node_lock, "runnable_node");
-        c->cpu_index = i;
     }
 }
 void init_lists_locks(){
@@ -474,7 +471,7 @@ wait(uint64 addr)
 void
 scheduler(void)
 {
-  num_active_cpu ++;
+  while(cas(&num_active_cpu,  num_active_cpu, num_active_cpu + 1) != 0);
   struct proc *p;
   struct cpu *c = mycpu();
   c->proc = 0;
@@ -505,7 +502,7 @@ void steal_proc(){
     struct cpu *c = mycpu();
     for (int i = 0; i < num_active_cpu; i++){
 
-        if(cpus[i].runnable_first_proc_id == -1 || i == c->cpu_index)
+        if(i == cpuid() || cpus[i].runnable_first_proc_id == -1)
             continue;
 
         struct proc* steal_proc = &proc[cpus[i].runnable_first_proc_id];
@@ -513,7 +510,7 @@ void steal_proc(){
             acquire(&steal_proc->lock);
             update_num_process(&cpus[i], -1);
             steal_proc->state = RUNNING;
-            steal_proc->cpu_num = c->cpu_index;
+            steal_proc->cpu_num = cpuid();
             update_num_process(c, 1);
             c->proc = steal_proc;
             swtch(&c->context, &steal_proc->context);
@@ -625,7 +622,7 @@ void
 wakeup(void *chan)
 {
   struct proc *p;
-  for(p = proc; p < &proc[NPROC]; p++) {
+  for(p = proc; p < &proc[NPROC]; p++) {  //TODO: update to run on sleeping only
     if(p != myproc()){
       acquire(&p->lock);
       if(p->state == SLEEPING && p->chan == chan) {

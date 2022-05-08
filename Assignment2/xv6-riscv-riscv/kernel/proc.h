@@ -27,7 +27,6 @@ struct cpu {
   volatile int runnable_first_proc_id;              //first proc on runnable list
   struct spinlock head_node_lock;
   volatile uint64 process_counter;
-  int cpu_index;
 };
 
 extern struct cpu cpus[NCPU];
