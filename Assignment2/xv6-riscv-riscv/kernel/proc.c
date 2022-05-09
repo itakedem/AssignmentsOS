@@ -508,10 +508,9 @@ void steal_proc(){
         struct proc* steal_proc = &proc[cpus[i].runnable_first_proc_id];
         if(remove_proc_from_list(&cpus[i].runnable_first_proc_id, steal_proc, &cpus[i].head_node_lock) == 0){
             acquire(&steal_proc->lock);
-            update_num_process(&cpus[i], -1);
             steal_proc->state = RUNNING;
             steal_proc->cpu_num = cpuid();
-            update_num_process(c, 1);
+            increase_num_process(c);
             c->proc = steal_proc;
             swtch(&c->context, &steal_proc->context);
             c->proc = 0;
@@ -602,7 +601,6 @@ sleep(void *chan, struct spinlock *lk)
   // Go to sleep.
   p->chan = chan;
   p->state = SLEEPING;
-  update_num_process(&cpus[p->cpu_num], -1);
   add_proc_to_list(&sleeping_first_proc_id, p, &sleeping_lock);
 
   sched();
@@ -618,22 +616,43 @@ sleep(void *chan, struct spinlock *lk)
 // Wake up all processes sleeping on chan.
 // Must be called without any p->lock.
 
+void check_wakeup(void * chan, struct proc* p){
+    if(p != myproc()) {
+        acquire(&p->lock);
+        if (p->chan == chan) {
+            remove_proc_from_list(&sleeping_first_proc_id, p, &sleeping_lock);
+            p->state = RUNNABLE;
+            p->cpu_num = update_cpu(p->cpu_num);
+            add_proc_to_list(&cpus[p->cpu_num].runnable_first_proc_id, p, &cpus[p->cpu_num].head_node_lock);
+        }
+        release(&p->lock);
+    }
+}
+
+
 void
 wakeup(void *chan)
 {
-  struct proc *p;
-  for(p = proc; p < &proc[NPROC]; p++) {  //TODO: update to run on sleeping only
-    if(p != myproc()){
-      acquire(&p->lock);
-      if(p->state == SLEEPING && p->chan == chan) {
-          remove_proc_from_list(&sleeping_first_proc_id, p, &sleeping_lock);
-          p->state = RUNNABLE;
-          p->cpu_num = update_cpu(p->cpu_num);
-          add_proc_to_list(&cpus[p->cpu_num].runnable_first_proc_id, p, &cpus[p->cpu_num].head_node_lock);
-      }
-      release(&p->lock);
-    }
+  int next_proc_id;
+  struct proc *curr_proc;
+  acquire(&sleeping_lock);
+  if(sleeping_first_proc_id == -1) {
+      release(&sleeping_lock);
+      return;
   }
+  curr_proc = &proc[sleeping_first_proc_id];
+  acquire(&curr_proc->node_lock);
+  release(&sleeping_lock);
+  next_proc_id = curr_proc->next_proc_id;
+  release(&curr_proc->node_lock);
+  check_wakeup(chan, curr_proc);
+  while(next_proc_id != -1){
+        curr_proc = &proc[next_proc_id];
+        acquire(&curr_proc->node_lock);
+        next_proc_id = curr_proc->next_proc_id;
+        release(&curr_proc->node_lock);
+        check_wakeup(chan, curr_proc);
+    }
 }
 
 
@@ -653,7 +672,7 @@ int update_cpu(int cpu_id){
     int new_cpu = cpu_id;
     if (is_balanced)
         new_cpu = least_used_cpu();
-    update_num_process(&cpus[new_cpu], 1);
+    increase_num_process(&cpus[new_cpu]);
     return  new_cpu;
 }
 // Kill the process with the given pid.
@@ -856,6 +875,6 @@ int cpu_process_count(int cpu_num){
     return cpus[cpu_num].process_counter;
 }
 
-void update_num_process(struct cpu* c, int update){
-    while(cas(&c->process_counter, c->process_counter, c->process_counter + update) != 0);
+void increase_num_process(struct cpu* c){
+    while(cas(&c->process_counter, c->process_counter, c->process_counter + 1) != 0);
 }
