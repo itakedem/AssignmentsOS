@@ -825,80 +825,67 @@ get_cpu()
 
 
 
-void add_proc_to_list(volatile int* first_proc_id, struct proc* new_proc, struct spinlock* first_lock) {
+void add_proc_to_list(int* first_proc_id, struct proc* new_proc, struct spinlock* first_lock) {
+    struct proc *curr_proc;
+    struct proc *prev_proc;
     acquire(first_lock);
-//    printf("starting addding to %s\n", first_lock->name);
-    if(*first_proc_id == new_proc->proc_index)
-        panic("added my self\n");
-    if(*first_proc_id == -1){
-        acquire(&new_proc->node_lock);
-        *first_proc_id =  new_proc->proc_index;
+    if (*first_proc_id == -1){
+        *first_proc_id = new_proc->proc_index;
         new_proc->next_proc_id = -1;
-        releaseAndPrint(&new_proc->node_lock, "add 1", new_proc);
-        releaseAndPrint(first_lock, "add 2", new_proc);
+        release(first_lock);
         return;
     }
-    acquire(&proc[*first_proc_id].node_lock);
-    releaseAndPrint(first_lock, "add 3",new_proc);
-    add_proc_to_list_rec(&proc[*first_proc_id], new_proc);
-}
-
-void add_proc_to_list_rec(struct proc* curr_proc, struct proc* new_proc) {
-    if(curr_proc->proc_index == new_proc->proc_index)
-        panic("added my self rec");
-    if(curr_proc->next_proc_id == -1){
-        curr_proc->next_proc_id = new_proc->proc_index;
-        new_proc->next_proc_id = -1;
-        releaseAndPrint(&curr_proc->node_lock, "add rec 1", curr_proc);
-        return;
+    curr_proc = &proc[*first_proc_id];
+    acquire(&curr_proc->node_lock);
+    release(first_lock);
+    while (curr_proc->next_proc_id != -1){
+        prev_proc = curr_proc;
+        curr_proc = &proc[curr_proc->next_proc_id];
+        acquire(&curr_proc->node_lock);
+        release(&prev_proc->node_lock);
     }
-    acquire(&proc[curr_proc->next_proc_id].node_lock);
-    releaseAndPrint(&curr_proc->node_lock, "add rec 2",curr_proc);
-    add_proc_to_list_rec(&proc[curr_proc->next_proc_id], new_proc);
+    curr_proc->next_proc_id = new_proc->proc_index;
+    new_proc->next_proc_id = -1;
+    release(&curr_proc->node_lock);
 }
 
-void remove_proc_from_list(volatile int* first_proc_id, struct proc* remove_proc, struct spinlock* first_lock) {
+
+
+void remove_proc_from_list(int* first_proc_id, struct proc* remove_proc, struct spinlock* first_lock) {
+    struct proc *curr_proc;
+    struct proc *prev_proc;
     acquire(first_lock);
-//    printf("starting removing from %s\n", first_lock->name);
-    acquire(&remove_proc->node_lock);
-    if(*first_proc_id == -1) //list is empty
-    {
-        printf("removing from list %s", first_lock->name);
-        panic("list is empty");
-    }
-    if(*first_proc_id == remove_proc->proc_index){
+    if (*first_proc_id == -1)
+        panic("list is empty - can't remove");
+
+    curr_proc = &proc[*first_proc_id];
+    acquire(&curr_proc->node_lock);
+    if (curr_proc->proc_index == remove_proc->proc_index){
         *first_proc_id = remove_proc->next_proc_id;
         remove_proc->next_proc_id = -1;
-        releaseAndPrint(&remove_proc->node_lock, "rem 3",remove_proc);
-        releaseAndPrint(first_lock, "rem 4",remove_proc);
+        release(&curr_proc->node_lock);
+        release(first_lock);
         return;
     }
-    releaseAndPrint(&remove_proc->node_lock, "rem 5",remove_proc);
-    acquire(&proc[*first_proc_id].node_lock);
-    releaseAndPrint(first_lock, "rem 6",remove_proc);
-    remove_proc_from_list_rec(&proc[*first_proc_id], remove_proc);
 
+    release(first_lock);
+    while (curr_proc->next_proc_id != remove_proc->proc_index){
+        if (curr_proc->next_proc_id  == -1)
+            panic("finished the list - didnt find removed proc");
+
+        prev_proc = curr_proc;
+        curr_proc = &proc[prev_proc->next_proc_id];
+        acquire(&curr_proc->node_lock);
+        release(&prev_proc->node_lock);
+    }
+    acquire(&remove_proc->node_lock);
+    curr_proc->next_proc_id = remove_proc->next_proc_id;
+    remove_proc->next_proc_id = -1;
+    release(&remove_proc->node_lock);
+    release(&curr_proc->node_lock);
 }
 
 
-void remove_proc_from_list_rec(struct proc* curr_proc, struct proc* remove_proc) {
-    if(curr_proc->next_proc_id == remove_proc->proc_index){
-        acquire(&remove_proc->node_lock);
-        curr_proc->next_proc_id = remove_proc->next_proc_id;
-        remove_proc->next_proc_id = -1;
-        releaseAndPrint(&remove_proc->node_lock, "rem rec 1",remove_proc);
-        releaseAndPrint(&curr_proc->node_lock, "rem rec 2",curr_proc);
-        return;
-    }
-    if(curr_proc->next_proc_id == -1){
-        printproc(curr_proc);
-        panic("didnt find remove proc");
-    }
-    acquire(&proc[curr_proc->next_proc_id].node_lock);
-    releaseAndPrint(&curr_proc->node_lock, "rem rec 3",curr_proc);
-
-    remove_proc_from_list_rec(&proc[curr_proc->next_proc_id], remove_proc);
-}
 
 void printproc(struct proc* p){
     char* state;
