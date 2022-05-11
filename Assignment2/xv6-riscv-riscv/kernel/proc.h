@@ -24,7 +24,7 @@ struct cpu {
   struct context context;     // swtch() here to enter scheduler().
   int noff;                   // Depth of push_off() nesting.
   int intena;                 // Were interrupts enabled before push_off()?
-  volatile int runnable_first_proc_id;              //first proc on runnable list
+  int runnable_first_proc_id;              //first proc on runnable list
   struct spinlock head_node_lock;
   volatile uint64 process_counter;
 };
@@ -97,7 +97,7 @@ struct proc {
   int pid;                     // Process ID
   volatile int cpu_num;                 // Process's CPU
   struct spinlock node_lock;
-  volatile int next_proc_id;               // next proc in list
+  int next_proc_id;               // next proc in list
   int proc_index;           //index in procs array
 
   // wait_lock must be held when using this:
