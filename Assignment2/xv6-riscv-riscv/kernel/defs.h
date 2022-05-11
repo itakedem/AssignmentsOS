@@ -106,10 +106,10 @@ int             either_copyin(void *dst, int user_src, uint64 src, uint64 len);
 void            procdump(void);
 int             set_cpu(int);
 int             get_cpu();
-int             add_proc_to_list(volatile int* first_proc_id, struct proc* new_proc, struct spinlock* first_lock);
-int             add_proc_to_list_rec(struct proc* curr_proc, struct proc* new_proc);
-int             remove_proc_from_list(volatile int* first_proc_id, struct proc* remove_proc, struct spinlock* first_lock);
-int             remove_proc_from_list_rec(struct proc* curr_proc, struct proc* remove_proc);
+void            add_proc_to_list(volatile int* first_proc_id, struct proc* new_proc, struct spinlock* first_lock);
+void            add_proc_to_list_rec(struct proc* curr_proc, struct proc* new_proc);
+void            remove_proc_from_list(volatile int* first_proc_id, struct proc* remove_proc, struct spinlock* first_lock);
+void            remove_proc_from_list_rec(struct proc* curr_proc, struct proc* remove_proc);
 void            init_lists_locks();
 void            printproc(struct proc* p);
 int             least_used_cpu();
@@ -118,6 +118,10 @@ int             cpu_process_count(int cpu_num);
 void            increase_num_process(struct cpu* c);
 void            steal_proc();
 void            check_wakeup(void * chan, struct proc *p);
+void
+releaseAndPrint(struct spinlock *lk, char* exp, struct proc *p);
+void
+print_list(int first_id);
 
 // swtch.S
 void            swtch(struct context*, struct context*);
@@ -126,6 +130,7 @@ void            swtch(struct context*, struct context*);
 void            acquire(struct spinlock*);
 int             holding(struct spinlock*);
 void            initlock(struct spinlock*, char*);
+void            release_test(struct spinlock*, struct proc *p,char* exp);
 void            release(struct spinlock*);
 void            push_off(void);
 void            pop_off(void);
