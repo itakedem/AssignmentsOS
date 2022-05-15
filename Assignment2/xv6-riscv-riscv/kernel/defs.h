@@ -107,19 +107,17 @@ void            procdump(void);
 int             set_cpu(int);
 int             get_cpu();
 void            add_proc_to_list(int* first_proc_id, struct proc* new_proc, struct spinlock* first_lock);
-void            remove_proc_from_list(int* first_proc_id, struct proc* remove_proc, struct spinlock* first_lock);
+int             remove_proc_from_list(int* first_proc_id, struct proc* remove_proc, struct spinlock* first_lock);
+int             pop_first(int* first_proc_id, struct spinlock* first_lock);
 void            init_lists_locks();
 void            printproc(struct proc* p);
 int             least_used_cpu();
-int             update_cpu(int cpu_id);
+int             update_cpu(int cpu_id, int is_fork);
 int             cpu_process_count(int cpu_num);
 void            increase_num_process(struct cpu* c);
 void            steal_proc();
-void            check_wakeup(void * chan, struct proc *p);
-void
-releaseAndPrint(struct spinlock *lk, char* exp, struct proc *p);
-void
-print_list(int first_id);
+void            trigger_wakeup(void * chan, struct proc *p);
+void            print_list(int first_id);
 
 // swtch.S
 void            swtch(struct context*, struct context*);
