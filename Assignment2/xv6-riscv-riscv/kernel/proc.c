@@ -136,9 +136,9 @@ static struct proc*
 allocproc(void)
 {
   struct proc *p;
-
-  if(unused_first_proc_id != -1){
-      p=&proc[unused_first_proc_id];
+  int proc_ind = pop_first(&unused_first_proc_id, &unused_lock);
+  if(proc_ind != -1){
+      p=&proc[proc_ind];
       acquire(&p->lock);
      goto found;
     }
@@ -147,8 +147,6 @@ allocproc(void)
 
 found:
   p->pid = allocpid();
-  if(remove_proc_from_list(&unused_first_proc_id, p, &unused_lock) == -1)
-      goto found;
   p->state = USED;
 
   // Allocate a trapframe page.
@@ -627,8 +625,7 @@ sleep(void *chan, struct spinlock *lk)
 
 void trigger_wakeup(void * chan, struct proc* p){
     struct cpu *c;
-    acquire(&p->lock);
-    if (p->chan == chan) {
+    if (p->state == SLEEPING && p->chan == chan) {
         if(remove_proc_from_list(&sleeping_first_proc_id, p, &sleeping_lock)){
             p->state = RUNNABLE;
             p->cpu_num = update_cpu(p->cpu_num, 0);
@@ -636,7 +633,6 @@ void trigger_wakeup(void * chan, struct proc* p){
             add_proc_to_list(&c->runnable_first_proc_id, p, &c->head_node_lock);
         }
     }
-    release(&p->lock);
 }
 
 void
@@ -649,16 +645,21 @@ wakeup(void *chan)
         return;
     }
     p = &proc[sleeping_first_proc_id];
+    acquire(&p->lock);
     release(&sleeping_lock);
     int next = p->next_proc_id;
     trigger_wakeup(chan, p);
+    release(&p->lock);
 
     while(next != -1){
         p = &proc[next];
+        acquire(&p->lock);
         next = p->next_proc_id;
         trigger_wakeup(chan, p);
+        release(&p->lock);
     }
 }
+
 
 int least_used_cpu(){
     int least_used = 0;
