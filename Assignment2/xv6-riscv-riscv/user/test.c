@@ -12,12 +12,34 @@
 int
 main(int argc, char *argv[])
 {
-    for(int i=0;i<100;i++){
+//    for(int i=0;i<100;i++){
+//        int pid = fork();
+//        if(pid != 0){
+//            printf("pid = %d\n",pid);
+//        } else if(i%10 != 0)while (1);
+//    }
+
         int pid = fork();
-        if(pid != 0){
-            printf("pid = %d\n",pid);
-        } else if(i%10 != 0)while (1);
+    if(pid != 0){
+        printf("pid = %d\n",pid);
+        exit(pid);
     }
+     pid = fork();
+    if(pid != 0){
+        printf("pid = %d\n",pid);
+        exit(pid);
+    }
+     pid = fork();
+    if(pid != 0){
+        printf("pid = %d\n",pid);
+        exit(pid);
+    }
+
+
+
+printf("cpu 0: %d\n", cpu_process_count(0));
+printf("cpu 1: %d\n", cpu_process_count(1));
+printf("cpu 2: %d\n", cpu_process_count(2));
 
     exit(0);
 }

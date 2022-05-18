@@ -493,8 +493,8 @@ scheduler(void)
       c->proc = 0;
       release(&p->lock);
     }
-//    else if(is_balanced)
-//        steal_proc();
+    else if(is_balanced)
+        steal_proc();
   }
 }
 
