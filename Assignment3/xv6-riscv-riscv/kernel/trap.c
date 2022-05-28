@@ -50,7 +50,7 @@ usertrap(void)
 
     // save user program counter.
     p->trapframe->epc = r_sepc();
-    if(r_scause() == 12 || r_scause() == 13 || r_scause() == 15){ //TODO: remove 12
+    if(r_scause() == 13 || r_scause() == 15){
         uint64 va = r_stval(); // va that caused tha trap
         if(cow_handler(p->pagetable, va) != 0){
             printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
