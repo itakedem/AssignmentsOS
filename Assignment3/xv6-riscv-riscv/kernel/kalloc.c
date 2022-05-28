@@ -39,7 +39,7 @@ freerange(void *pa_start, void *pa_end)
     char *p;
     p = (char*)PGROUNDUP((uint64)pa_start);
     for(; p + PGSIZE <= (char*)pa_end; p += PGSIZE){
-        kmem.page_ref_count[(((uint64)p-KERNBASE) / PGSIZE)] = 1;// TODO
+        kmem.page_ref_count[(((uint64)p-KERNBASE) / PGSIZE)] = 1;
         kfree(p);
     }
 }
