@@ -241,7 +241,7 @@ int cow_handler(pagetable_t pagetable, uint64 va){
     if ((*pte & PTE_U) == 0) //not user accessibility
         return -1;
     if ((*pte & PTE_COW) == 0)   //not cow
-        return 1;
+        return 1;   //returns 1 so when calls from vm - copyout func is not failed from this (it didn't get trap..)
 
     if ((mem = kalloc()) == 0)
         return -1;
