@@ -22,7 +22,7 @@ struct run {
 struct {
     struct spinlock lock;
     struct run *freelist;
-    uint page_ref_count[NUM_PYS_PAGES];
+    uint64 page_ref_count[NUM_PYS_PAGES];
 } kmem;
 
 void
