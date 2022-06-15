@@ -27,9 +27,21 @@ task2_test(void){
     printf("Finished writing 10MB\ntest finished\n");
 }
 
+void
+task3_test(void){
+    int fd;
+    char data[1024];
+
+    // fills the data array with 7s
+    fd = open("sanity_check_3", O_CREATE | O_RDWR);
+    write(fd, "data", sizeof(data));
+}
+
+
 int main(int argc, char* argv[]){
     printf("Sanity Test - Task 2\n");
-    task2_test();
+    //task2_test();
+    task3_test();
 
     exit(1);
 }
