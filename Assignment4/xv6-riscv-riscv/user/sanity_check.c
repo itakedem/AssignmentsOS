@@ -40,7 +40,7 @@ task3_test(void){
 
 int main(int argc, char* argv[]){
     printf("Sanity Test - Task 2\n");
-    //task2_test();
+    task2_test();
     task3_test();
 
     exit(1);
