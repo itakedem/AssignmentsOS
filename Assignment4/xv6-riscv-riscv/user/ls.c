@@ -41,12 +41,12 @@ fmtsymname(char *path)
     p++;
 
     // Return blank-padded name.
-    if(strlen(p) >= DIRSIZ)
+    if(strlen(p)+strlen(symlink)+2 >= DIRSIZ)
         return p;
     memmove(buf, p, strlen(p));
-    memmove(buf + strlen(p), "->.", 3);
-    memmove(buf + strlen(p) + 3, symlink, strlen(symlink));
-    memset(buf+strlen(p) + 3 + strlen(symlink), ' ', DIRSIZ-strlen(p)-strlen(symlink)-3);
+    memmove(buf + strlen(p), "->", 2);
+    memmove(buf + strlen(p) + 2, symlink, strlen(symlink));
+    memset(buf+strlen(p) + 2 + strlen(symlink), ' ', DIRSIZ-strlen(p)-strlen(symlink)-2);
     return buf;
 }
 
