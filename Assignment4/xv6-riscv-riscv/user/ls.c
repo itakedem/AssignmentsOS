@@ -8,7 +8,7 @@
 
 
 char*
-fmtname(char *path, int sym)
+fmtname(char *path)
 {
   static char buf[DIRSIZ+1];
   char *p;
@@ -17,12 +17,6 @@ fmtname(char *path, int sym)
   for(p=path+strlen(path); p >= path && *p != '/'; p--)
     ;
   p++;
-//  if(sym){
-//      char sym_buf[MAXPATH];
-//      int sym_bufsize = MAXPATH;
-//      readlink(path, sym_buf, sym_bufsize);
-//      strcat(p, sym_buf);
-//  }
 
   // Return blank-padded name.
   if(strlen(p) >= DIRSIZ)
@@ -30,6 +24,30 @@ fmtname(char *path, int sym)
   memmove(buf, p, strlen(p));
   memset(buf+strlen(p), ' ', DIRSIZ-strlen(p));
   return buf;
+}
+
+
+char*
+fmtsymname(char *path)
+{
+    static char buf[DIRSIZ+1];
+    char *p;
+    char symlink[512];
+    readlink(path, symlink, 512);
+
+    // Find first character after last slash.
+    for(p=path+strlen(path); p >= path && *p != '/'; p--)
+        ;
+    p++;
+
+    // Return blank-padded name.
+    if(strlen(p) >= DIRSIZ)
+        return p;
+    memmove(buf, p, strlen(p));
+    memmove(buf + strlen(p), "->.", 3);
+    memmove(buf + strlen(p) + 3, symlink, strlen(symlink));
+    memset(buf+strlen(p) + 3 + strlen(symlink), ' ', DIRSIZ-strlen(p)-strlen(symlink)-3);
+    return buf;
 }
 
 void
@@ -54,11 +72,12 @@ ls(char *path)
   switch(st.type){
 
   case T_SYMLINK:
-      printf("%s %d %d %l\n", fmtname(path, 1), st.type, st.ino, st.size);
+
+      printf("%s %d %d 0\n", fmtsymname(path), st.type, st.ino);
       break;
 
   case T_FILE:
-    printf("%s %d %d %l\n", fmtname(path, 0), st.type, st.ino, st.size);
+    printf("%s %d %d %l\n", fmtname(path), st.type, st.ino, st.size);
     break;
 
   case T_DIR:
@@ -78,7 +97,11 @@ ls(char *path)
         printf("ls: cannot stat %s\n", buf);
         continue;
       }
-      printf("%s %d %d %d\n", fmtname(buf, 0), st.type, st.ino, st.size);
+      if(st.type == T_SYMLINK)
+          printf("%s %d %d 0\n", fmtsymname(buf), st.type, st.ino);
+
+      else
+        printf("%s %d %d %d\n", fmtname(buf), st.type, st.ino, st.size);
     }
     break;
   }
