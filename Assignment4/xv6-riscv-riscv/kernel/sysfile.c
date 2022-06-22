@@ -286,7 +286,7 @@ create(char *path, short type, short major, short minor)
 uint64
 sys_open(void)
 {
-  char path[MAXPATH];//, pathname[MAXPATH];
+  char path[MAXPATH];
   int fd, omode;
   struct file *f;
   struct inode *ip, *symip;
@@ -305,13 +305,6 @@ sys_open(void)
       return -1;
     }
   } else {
-//      if(readlink(path, pathname, MAXPATH) == 0){
-//          if((ip = namei(pathname)) == 0){
-//              end_op();
-//              return -1;
-//          }
-//      }
-//    else
     if((ip = namei(path)) == 0){
       end_op();
       return -1;
@@ -323,20 +316,7 @@ sys_open(void)
       return -1;
     }
 
-  //checks dereference count for ls
-  for (int i = 0; i < MAX_DEREFERENCE && strncmp(p->name,"ls", 2); i++){
-      if ((symip = namei((char*)ip->addrs)) == 0){
-              iunlock(ip);
-              return -1;
-          }
-      if (ip->type == T_SYMLINK){
-          iunlock(ip);
-          ip = symip;
-          ilock(ip);
-      }
-      else
-          break;
-  }
+
 
   if(ip->type == T_DEVICE && (ip->major < 0 || ip->major >= NDEV)){
     iunlockput(ip);
@@ -573,18 +553,6 @@ int readlink(char* pathname, uint64 addr, int bufsize){
     if(ip->size > bufsize) //check for short path
         goto err;
 
-    for (int i = 0; i < MAX_DEREFERENCE; i++){
-        if (ip->type == T_SYMLINK){
-            if ((symip = namei((char*)ip->addrs)) == 0)
-                goto err;
-
-            iunlock(ip);
-            ip = symip;
-            ilock(ip);
-        }
-        else
-            break;
-    }
     if(readi(ip, 0, (uint64)buffer, 0, bufsize) < 0)
         goto err;
 
