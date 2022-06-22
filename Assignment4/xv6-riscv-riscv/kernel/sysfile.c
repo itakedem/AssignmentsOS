@@ -197,7 +197,6 @@ sys_unlink(void)
     end_op();
     return -1;
   }
-
   ilock(dp);
 
   // Cannot unlink "." or "..".
@@ -214,7 +213,6 @@ sys_unlink(void)
     iunlockput(ip);
     goto bad;
   }
-
   memset(&de, 0, sizeof(de));
   if(writei(dp, 0, (uint64)&de, off, sizeof(de)) != sizeof(de))
     panic("unlink: writei");
