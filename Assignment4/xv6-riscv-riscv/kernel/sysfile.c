@@ -286,11 +286,12 @@ create(char *path, short type, short major, short minor)
 uint64
 sys_open(void)
 {
-  char path[MAXPATH];
+  char path[MAXPATH], pathname[MAXPATH];
   int fd, omode;
   struct file *f;
-  struct inode *ip;
+  struct inode *ip, *symip;
   int n;
+  struct proc* p = myproc();
 
   if((n = argstr(0, path, MAXPATH)) < 0 || argint(1, &omode) < 0)
     return -1;
@@ -304,16 +305,36 @@ sys_open(void)
       return -1;
     }
   } else {
-    if((ip = namei(path)) == 0){
+      if(readlink(path, pathname, MAXPATH) == 0){
+          if((ip = namei(pathname)) == 0){
+              end_op();
+              return -1;
+          }
+      }
+    else if((ip = namei(path)) == 0){
       end_op();
       return -1;
-    }
+    }}
     ilock(ip);
     if(ip->type == T_DIR && omode != O_RDONLY){
       iunlockput(ip);
       end_op();
       return -1;
     }
+
+  //checks dereference count for ls
+  for (int i = 0; i < MAX_DEREFERENCE && strncmp(p->name,"ls", 2); i++){
+      if ((symip = namei((char*)ip->addrs)) == 0){
+              iunlock(ip);
+              return -1;
+          }
+      if (symip->symlink){
+          iunlock(ip);
+          ip = symip;
+          ilock(ip);
+      }
+      else
+          break;
   }
 
   if(ip->type == T_DEVICE && (ip->major < 0 || ip->major >= NDEV)){
@@ -393,12 +414,24 @@ sys_chdir(void)
   char path[MAXPATH];
   struct inode *ip;
   struct proc *p = myproc();
+  char pathname[MAXPATH];
   
   begin_op();
-  if(argstr(0, path, MAXPATH) < 0 || (ip = namei(path)) == 0){
+  if(argstr(0, path, MAXPATH) < 0){
     end_op();
     return -1;
   }
+  if (readlink(path, pathname, MAXPATH) == 0){
+      if ((ip = namei(pathname)) == 0){
+          end_op();
+          return -1;
+      }
+  }
+  else if ((ip = namei(path)) == 0){
+      end_op();
+      return -1;
+  }
+
   ilock(ip);
   if(ip->type != T_DIR){
     iunlockput(ip);
@@ -483,4 +516,81 @@ sys_pipe(void)
     return -1;
   }
   return 0;
+}
+
+uint64
+sys_symlink(void)
+{
+    char oldpath[MAXPATH], newpath[MAXPATH];
+    struct inode* ip;
+    struct file* f;
+
+    if (argstr(0, oldpath, MAXPATH) < 0 || argstr(1, newpath, MAXPATH) < 0)
+        return -1;
+
+    begin_op();
+
+    if((ip = create(newpath, T_SYMLINK, 0, 0)) == 0){
+        end_op();
+        return -1;
+    }
+    ip->symlink = 1;
+    end_op();
+
+    if ((f = filealloc()) == 0){
+        if (f)
+            fileclose(f);
+        iunlockput(ip);
+        return -1;
+    }
+
+    safestrcpy((char*)ip->addrs, oldpath, MAXPATH);
+    iunlock(ip);
+
+    f->ip = ip;
+    f->off = 0;
+    f->readable = 1;
+    f->writable = 0;
+    return 0;
+}
+
+uint64
+sys_readlink(void)
+{
+    char pathname[MAXPATH];
+    char buf[MAXPATH];
+    int bufsize;
+    if (argstr(0, pathname, MAXPATH) < 0  || argstr(1, buf, MAXPATH) < 0 || argint(2, &bufsize) < 0)
+        return -1; //could not fill the args
+
+    return readlink(pathname, buf, bufsize);  //TODO: add check for short path
+}
+
+int readlink(char* pathname, char* buf, int bufsize){
+    struct inode *ip, *symip;
+    if ((ip = namei(pathname)) == 0) //check if path exists
+        return -1;
+    ilock(ip);
+
+    if (!ip->symlink){  //checks if symlink
+        iunlock(ip);
+        return -1;
+    }
+    for (int i = 0; i < MAX_DEREFERENCE; i++){
+        if (ip->symlink){
+            if ((symip = namei((char*)ip->addrs)) == 0){
+                iunlock(ip);
+                return -1;
+            }
+            iunlock(ip);
+            ip = symip;
+            ilock(ip);
+        }
+        else
+            break;
+    }
+
+    safestrcpy(buf, (char*)ip->addrs, bufsize);
+    iunlock(ip);
+    return 0;
 }

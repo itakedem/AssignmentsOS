@@ -27,6 +27,7 @@ struct inode {
   short nlink;
   uint size;
   uint addrs[NDIRECT+2];   //updated to 2 for double indirect
+  char symlink;
 };
 
 // map major device number to device functions.
@@ -38,3 +39,4 @@ struct devsw {
 extern struct devsw devsw[];
 
 #define CONSOLE 1
+#define MAX_DEREFERENCE 31
