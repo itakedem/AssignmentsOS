@@ -27,7 +27,7 @@ struct inode {
   short nlink;
   uint size;
   uint addrs[NDIRECT+2];   //updated to 2 for double indirect
-  char symlink;
+  //char symlink;
 };
 
 // map major device number to device functions.

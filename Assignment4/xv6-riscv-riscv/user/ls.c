@@ -3,7 +3,7 @@
 #include "user/user.h"
 #include "kernel/fs.h"
 #include "kernel/param.h"
-#include <string.h>
+//#include <string.h>
 
 
 
@@ -17,12 +17,12 @@ fmtname(char *path, int sym)
   for(p=path+strlen(path); p >= path && *p != '/'; p--)
     ;
   p++;
-  if(sym){
-      char sym_buf[MAXPATH];
-      int sym_bufsize = MAXPATH;
-      readlink(path, sym_buf, sym_bufsize);
-      strcat(p, sym_buf);
-  }
+//  if(sym){
+//      char sym_buf[MAXPATH];
+//      int sym_bufsize = MAXPATH;
+//      readlink(path, sym_buf, sym_bufsize);
+//      strcat(p, sym_buf);
+//  }
 
   // Return blank-padded name.
   if(strlen(p) >= DIRSIZ)
@@ -52,6 +52,7 @@ ls(char *path)
   }
 
   switch(st.type){
+
   case T_SYMLINK:
       printf("%s %d %d %l\n", fmtname(path, 1), st.type, st.ino, st.size);
       break;

@@ -10,34 +10,33 @@
 static int loadseg(pde_t *pgdir, uint64 addr, struct inode *ip, uint offset, uint sz);
 
 int
-exec(char *path, char **argv)
-{
-  char *s, *last;
-  int i, off;
-  uint64 argc, sz = 0, sp, ustack[MAXARG], stackbase;
-  struct elfhdr elf;
-  struct inode *ip;
-  struct proghdr ph;
-  pagetable_t pagetable = 0, oldpagetable;
-  struct proc *p = myproc();
-  char pathname[MAXPATH];     //added path name
+exec(char *path, char **argv) {
+    char *s, *last;
+    int i, off;
+    uint64 argc, sz = 0, sp, ustack[MAXARG], stackbase;
+    struct elfhdr elf;
+    struct inode *ip;
+    struct proghdr ph;
+    pagetable_t pagetable = 0, oldpagetable;
+    struct proc *p = myproc();
+    //char pathname[MAXPATH];     //added path name
 
-  begin_op();
-  if(readlink(path, pathname, 64) == 0){  //check is symbol link
-      if((ip = namei(pathname)) == 0){
-          end_op();
-          printf("read link exec: fail \n");
-          return -1;
-      }
-  }
+    begin_op();
+//  if(sys_readlink(path, pathname, 64) == 0){  //check is symbol link
+//      if((ip = namei(pathname)) == 0){
+//          end_op();
+//          printf("read link exec: fail \n");
+//          return -1;
+//      }
+//  }
 
-  else {
-      if ((ip = namei(path)) == 0) {
-          end_op();
-          printf("hard exec: fail \n");
-          return -1;
-      }
-  }
+//  else {
+    if ((ip = namei(path)) == 0) {
+        end_op();
+        printf("hard exec: fail \n");
+        return -1;
+    }
+//}
   ilock(ip);
 
   // Check ELF header
