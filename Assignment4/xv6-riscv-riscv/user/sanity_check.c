@@ -16,7 +16,7 @@ task2_test(void){
 
     // fills the data array with 7s
     memset(data, 7, 1024);
-    fd = open("sanity_check_file", O_CREATE | O_RDWR);
+    fd = open("sanity_file", O_CREATE | O_RDWR);
     for(int i = 0; i < 1024*10; i++){
         write(fd, data, sizeof(data));
         if (i == 11)
@@ -33,14 +33,14 @@ task3_test(void){
     char data[1024];
 
     // fills the data array with 7s
-    fd = open("sanity_check_3", O_CREATE | O_RDWR);
+    fd = open("sanity_3", O_CREATE | O_RDWR);
     write(fd, "data", sizeof(data));
 }
 
 
 int main(int argc, char* argv[]){
     printf("Sanity Test - Task 2\n");
-    task2_test();
+//    task2_test();
     task3_test();
 
     exit(1);

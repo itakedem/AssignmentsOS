@@ -410,18 +410,18 @@ sys_chdir(void)
   }
 
   ilock(ip);
-  if(ip->type != T_DIR && ip->type != T_SYMLINK){
-    iunlockput(ip);
-    end_op();
-    return -1;
-  }
-
   if(ip->type == T_SYMLINK){
       if((ip = link_dereference(ip, path)) == 0){
           end_op();
           return -1;
       }
   }
+  if(ip->type != T_DIR){
+    iunlockput(ip);
+    end_op();
+    return -1;
+  }
+
   iunlock(ip);
   iput(p->cwd);
   end_op();
@@ -518,12 +518,28 @@ uint64
 sys_symlink(void)
 {
     char oldpath[MAXPATH], newpath[MAXPATH];
-    struct inode* ip;
+    struct inode *ip, *dp;
+    char dir[DIRSIZ];
+    uint poff;
+
 
     if (argstr(0, oldpath, MAXPATH) < 0 || argstr(1, newpath, MAXPATH) < 0)
         return -1;
 
     begin_op();
+
+    if((dp = nameiparent(newpath, dir)) == 0){  //parent inode
+        end_op();
+        return -1;
+    }
+    ilock(dp);
+
+    if((ip = dirlookup(dp, dir, &poff)) != 0){ //check if exists in folder
+        iunlock(dp);
+        end_op();
+        return -1;
+    }
+    iunlock(dp);
 
     if((ip = create(newpath, T_SYMLINK, 0, 0)) == 0){
         end_op();
